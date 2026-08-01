@@ -818,8 +818,17 @@ def executive_expense_summary(df_executive_expense: pd.DataFrame) -> pd.DataFram
 
 
 def welfare_total_summary(df_welfare: pd.DataFrame) -> pd.DataFrame:
-    """기관×연도별 총복리후생비(예산상 복리후생비 총괄 시트 기준)를 계산한다."""
-    sub = df_welfare[df_welfare["sheet_group"] == "예산상_복리후생비_총괄"]
+    """기관×연도별 총복리후생비를 계산한다 (예산상 복리후생비 총괄 시트 기준).
+
+    [버그 수정 - 2026-08-01] 이 시트의 '항목' 열에는 개별 세부항목(예: '급여성 > 보육비'),
+    소계('소계(A)', '소계(B)'), 총계('총계(A+B)')가 전부 같은 열에 섞여 있다.
+    이전 코드는 이 모든 행을 무조건 합산해 실제 값의 몇 배로 부풀려졌다(이중·삼중 합산 버그).
+    올바른 방법은 '총계(A+B)' 행만 사용하는 것이며, 이 행은 구분(임원/정규직 등) 별로 존재하므로
+    구분 카테고리 합계를 institution×year 기준으로 다시 합산해야 기관 전체 총액이 나온다.
+    """
+    sub = df_welfare[
+        (df_welfare["sheet_group"] == "예산상_복리후생비_총괄") & (df_welfare["item"] == "총계(A+B)")
+    ]
     return sub.groupby(GROUP_KEYS, as_index=False)["value"].sum().rename(
         columns={"value": "total_welfare_expense"}
     )
@@ -832,7 +841,14 @@ def welfare_category_breakdown(df_welfare: pd.DataFrame) -> pd.DataFrame:
 
 
 def finance_summary(df_finance: pd.DataFrame) -> pd.DataFrame:
-    """기관×연도별 총수입/총지출/정부지원수입/자체수입 관련 값을 계산한다 (수입지출현황 시트 기준)."""
+    """기관×연도별 총수입/총지출/정부지원수입/자체수입 관련 값을 계산한다 (수입지출현황 시트 기준).
+
+    [버그 수정 - 2026-08-01] '정부지원수입'은 '직접지원/간접지원' 세부항목(출연금, 보조금, 부담금,
+    이전수입, 부대수입, 사업수입, 위탁수입, 독점수입 등 9개)과 그 소계('수입 > 정부지원수입 > 소계')가
+    전부 level_2 == '정부지원수입' 값을 공유한다. 이전 코드는 level_2 만으로 필터링해 세부항목과
+    소계를 동시에 합산했기 때문에 정부지원수입이 실제의 약 2배로 계산되었다.
+    올바른 방법은 level_3 == '소계' 인 행(공식 소계 행)만 사용하는 것이다.
+    """
     base = df_finance[df_finance["statement_type"] == "수입지출현황"]
     if base.empty:
         return pd.DataFrame(columns=GROUP_KEYS)
@@ -841,9 +857,14 @@ def finance_summary(df_finance: pd.DataFrame) -> pd.DataFrame:
         sub = base[base["level_2"].isin(level2_values)]
         return sub.groupby(GROUP_KEYS, as_index=False)["value"].sum()
 
+    def _sum_subtotal(level2_value):
+        """level_2가 특정 값이면서 level_3 == '소계' 인 공식 소계 행만 합산한다 (이중합산 방지)."""
+        sub = base[(base["level_2"] == level2_value) & (base["level_3"] == "소계")]
+        return sub.groupby(GROUP_KEYS, as_index=False)["value"].sum()
+
     total_revenue = _sum_level2(["수입합계"]).rename(columns={"value": "total_revenue"})
     total_expense = _sum_level2(["지출합계"]).rename(columns={"value": "total_expense"})
-    gov_support = _sum_level2(["정부지원수입"]).rename(columns={"value": "gov_support_revenue"})
+    gov_support = _sum_subtotal("정부지원수입").rename(columns={"value": "gov_support_revenue"})
     conservative_own = _sum_level2(["기타사업수입", "부대수입", "기타"]).rename(
         columns={"value": "own_revenue_conservative"}
     )
@@ -893,6 +914,65 @@ def work_family_daycare_summary(df_work_family: pd.DataFrame) -> pd.DataFrame:
         columns={"value": "daycare_beneficiaries"}
     )
     return amount_pivot.merge(benefit_pivot, on=GROUP_KEYS, how="outer")
+
+
+# 유연근무 5개 제도(시간선택제-채용, 시간선택제-전환, 탄력근무제, 재량근무제, 원격근무제)의
+# '계' 항목(인원수 기준). 하위 세부유형(정규직/무기계약직/비정규직, 시차출퇴근형 등)은 이미
+# 이 '계' 항목에 합산되어 있으므로 별도로 더하면 이중합산이 되어 여기서는 사용하지 않는다.
+FLEXWORK_TOTAL_ITEMS = [
+    "시간선택제-채용-계-인원수",
+    "시간선택제-전환-계-인원수",
+    "탄력근무제-전체-계-인원수",
+    "재량근무제-전체-재량근무제-인원수",
+    "원격근무제-전체-계-인원수",
+]
+
+
+def work_family_flexwork_summary(df_work_family: pd.DataFrame) -> pd.DataFrame:
+    """기관×연도별 유연근무 전체 이용 인원(5개 제도 '계' 항목 합, 인원수 기준)과 제도별 상세를 계산한다."""
+    sub = df_work_family[
+        (df_work_family["sheet_name"].str.contains("유연근무", na=False))
+        & (df_work_family.get("metric_type") == "인원수")
+    ]
+    total = sub[sub["item"].isin(FLEXWORK_TOTAL_ITEMS)].groupby(GROUP_KEYS, as_index=False)["value"].sum().rename(
+        columns={"value": "flexwork_total_users"}
+    )
+    detail = sub[sub["item"].isin(FLEXWORK_TOTAL_ITEMS)].copy()
+    detail["flex_type"] = detail["item"].map({
+        "시간선택제-채용-계-인원수": "시간선택제(채용)",
+        "시간선택제-전환-계-인원수": "시간선택제(전환)",
+        "탄력근무제-전체-계-인원수": "탄력근무제",
+        "재량근무제-전체-재량근무제-인원수": "재량근무제",
+        "원격근무제-전체-계-인원수": "원격근무제",
+    })
+    return total, detail[GROUP_KEYS + ["flex_type", "value"]]
+
+
+def work_family_care_summary(df_work_family: pd.DataFrame) -> pd.DataFrame:
+    """기관×연도별 가족돌봄휴가·휴직 이용자 수(전체/남성/여성)를 계산한다 (휴가·휴직 합산)."""
+    sub = df_work_family[df_work_family["sheet_name"].str.contains("가족돌봄", na=False)]
+    total = sub[sub["item"] == "전체"].groupby(GROUP_KEYS, as_index=False)["value"].sum().rename(
+        columns={"value": "family_care_total"}
+    )
+    male = sub[sub["item"] == "남성"].groupby(GROUP_KEYS, as_index=False)["value"].sum().rename(
+        columns={"value": "family_care_male"}
+    )
+    female = sub[sub["item"] == "여성"].groupby(GROUP_KEYS, as_index=False)["value"].sum().rename(
+        columns={"value": "family_care_female"}
+    )
+    return total.merge(male, on=GROUP_KEYS, how="outer").merge(female, on=GROUP_KEYS, how="outer")
+
+
+def corporate_tax_summary(df_corporate_tax: pd.DataFrame) -> pd.DataFrame:
+    """기관×연도별 법인세 관련 지표(과세표준/산출세액/세액공제/가산세/결정세액)를 계산한다."""
+    items = ["과세표준", "법인세 산출세액", "세액공제", "가산세", "결정세액"]
+    sub = df_corporate_tax[df_corporate_tax["item"].isin(items)]
+    pivot = sub.pivot_table(index=GROUP_KEYS, columns="item", values="value", aggfunc="sum").reset_index()
+    pivot = pivot.rename(columns={
+        "과세표준": "tax_base", "법인세 산출세액": "tax_calculated",
+        "세액공제": "tax_credit", "가산세": "tax_penalty", "결정세액": "tax_final",
+    })
+    return pivot
 
 
 def compute_comparison_index(value: float, comparison_mean: float) -> float:
@@ -982,7 +1062,7 @@ def safe_divide(numerator, denominator):
 # ============================================================================
 # charts.py 내용
 # ============================================================================
-CHART_HEIGHT = 340
+CHART_HEIGHT = 270
 FONT_SIZE_AXIS = 13
 FONT_SIZE_TITLE = 18
 
@@ -1002,6 +1082,13 @@ def render_or_empty(fig, container=st, empty_message: str = "표시할 데이터
         return
     fig.update_layout(**COMMON_LAYOUT)
     container.plotly_chart(fig, use_container_width=True)
+
+
+def render_scatter_or_empty(fig, container=st, empty_message: str = "표시할 데이터가 없습니다.") -> None:
+    """산점도 전용 렌더 함수. 차트 바로 아래에 '인과관계 아님' 주의문구를 항상 함께 표시한다."""
+    render_or_empty(fig, container, empty_message)
+    if fig is not None:
+        container.caption("※ 추세선은 두 변수 간 단순한 관계를 보여줄 뿐, 인과관계를 의미하지 않습니다.")
 
 
 def line_trend_chart(df: pd.DataFrame, x: str, y: str, color: str, title: str, y_title: str, unit: str):
@@ -1093,7 +1180,26 @@ def grouped_bar_chart(df: pd.DataFrame, x: str, y: str, color: str, title: str, 
 # ============================================================================
 # filters.py 내용
 # ============================================================================
-COMPARISON_OPTIONS = ["전체 기관", "동일 기관유형", "동일 주무부처"]
+COMPARISON_OPTIONS = ["전체 기관", "동일 기관유형", "동일 주무부처", "유사 인력규모"]
+
+# 인력규모 구간 (실제 데이터 분포 확인 결과: 25%tile≈125명, 중앙값≈266명, 75%tile≈868명, 90%tile≈3,000명)
+SIZE_BRACKETS = [
+    (0, 100, "100명 미만"),
+    (100, 500, "100~499명"),
+    (500, 1000, "500~999명"),
+    (1000, 5000, "1,000~4,999명"),
+    (5000, float("inf"), "5,000명 이상"),
+]
+
+
+def get_size_bracket(total_workforce) -> Optional[str]:
+    """임직원 수를 기준으로 유사 인력규모 구간 이름을 반환한다."""
+    if total_workforce is None or pd.isna(total_workforce):
+        return None
+    for low, high, label in SIZE_BRACKETS:
+        if low <= total_workforce < high:
+            return label
+    return None
 
 
 @dataclass
@@ -1107,28 +1213,44 @@ class FilterState:
     comparison_basis: str = "전체 기관"
 
 
-def render_common_filters(years: list, options: dict) -> FilterState:
-    """상단 공통 필터를 한 줄로 배치하고 선택 결과를 FilterState 로 반환한다."""
+def render_common_filters(years: list, master: pd.DataFrame) -> FilterState:
+    """상단 공통 필터를 한 줄로 배치한다.
+
+    [버그 수정 - 2026-08-01] 기존에는 기관유형/주무부처/기관명 선택지가 서로 독립적으로 계산되어
+    '기관유형: 공기업(시장형)' 을 골라도 '기관명' 선택창에는 여전히 전체 기관이 나오는 문제가 있었다.
+    이제는 기관유형 선택 → 그 유형에 속한 주무부처만 표시 → 그 조합에 속한 기관명만 표시되도록
+    순차적으로 선택지를 좁혀나간다 (master 를 직접 필터링).
+    """
     col1, col2, col3, col4, col5 = st.columns([1, 1.4, 1.4, 1.6, 1.2])
 
     with col1:
         year = st.selectbox("기준연도", years, index=0 if years else None, key="flt_year")
 
+    type_options = sorted(master["institution_type"].dropna().unique().tolist()) if not master.empty else []
     with col2:
         institution_types = st.multiselect(
-            "기관유형", options["institution_types"], default=[], key="flt_type",
+            "기관유형", type_options, default=[], key="flt_type",
             placeholder="전체 (선택 안 함 = 전체)",
         )
 
+    filtered_master = master.copy()
+    if institution_types:
+        filtered_master = filtered_master[filtered_master["institution_type"].isin(institution_types)]
+
+    ministry_options = sorted(filtered_master["ministry"].dropna().unique().tolist()) if not filtered_master.empty else []
     with col3:
         ministries = st.multiselect(
-            "주무부처", options["ministries"], default=[], key="flt_ministry",
+            "주무부처", ministry_options, default=[], key="flt_ministry",
             placeholder="전체 (선택 안 함 = 전체)",
         )
 
+    if ministries:
+        filtered_master = filtered_master[filtered_master["ministry"].isin(ministries)]
+
+    institution_options = sorted(filtered_master["institution_name"].dropna().unique().tolist()) if not filtered_master.empty else []
     with col4:
         institution_name = st.selectbox(
-            "기관명", ["전체"] + options["institution_names"], index=0, key="flt_institution",
+            "기관명", ["전체"] + institution_options, index=0, key="flt_institution",
         )
 
     with col5:
@@ -1148,7 +1270,7 @@ def apply_common_filters(
     master: pd.DataFrame,
     state: FilterState,
     apply_year: bool = True,
-    apply_institution: bool = False,
+    apply_institution: bool = True,
 ) -> pd.DataFrame:
     """공통 필터 조건을 데이터프레임에 적용한다.
 
@@ -1266,7 +1388,7 @@ def setup_page(title_suffix: str = "") -> None:
         page_title="공공기관 경영정보 대시보드" + (f" - {title_suffix}" if title_suffix else ""),
         page_icon="📊",
         layout="wide",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed",
     )
     st.markdown(
         """
