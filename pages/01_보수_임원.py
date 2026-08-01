@@ -6,12 +6,12 @@ import pandas as pd
 import streamlit as st
 
 from common_data import (
-    setup_page, load_data_or_stop, get_available_years, get_filter_options,
+    setup_page, load_data_or_stop, get_available_years,
     render_common_filters, apply_common_filters,
     employee_avg_pay_summary, starting_pay_summary, executive_pay_summary,
     executive_expense_summary, workforce_summary,
     format_number, format_percent, format_amount_krw_thousand, safe_divide,
-    line_trend_chart, stacked_bar_chart, scatter_with_trend, bar_ranking_chart, render_or_empty,
+    line_trend_chart, stacked_bar_chart, scatter_with_trend, bar_ranking_chart, render_or_empty, render_scatter_or_empty,
 )
 
 setup_page("보수·임원")
@@ -20,8 +20,7 @@ st.title("💰 보수·임원")
 DATA = load_data_or_stop()
 MASTER = DATA["institution_master"]
 YEARS = get_available_years(DATA)
-FILTER_OPTIONS = get_filter_options(MASTER)
-FSTATE = render_common_filters(YEARS, FILTER_OPTIONS)
+FSTATE = render_common_filters(YEARS, MASTER)
 st.divider()
 
 
@@ -101,14 +100,16 @@ else:
         sc1 = merged3[["institution_name_raw", "avg_tenure_months", "employee_avg_pay"]].dropna() \
             if "avg_tenure_months" in merged3.columns else pd.DataFrame()
         fig3 = scatter_with_trend(sc1, "avg_tenure_months", "employee_avg_pay", "institution_name_raw",
-                                   "직원 평균보수 vs 평균근속연수", "평균근속연수(개월)", "평균보수(천원)")
-        render_or_empty(fig3)
+                                   "근속연수가 길수록 평균보수도 높은가", "평균근속연수(개월)", "평균보수(천원)")
+        render_scatter_or_empty(fig3)
     with col_d:
         rank_df = merged3[["institution_name_raw", "pay_multiple"]].dropna().sort_values("pay_multiple", ascending=False)
         fig4 = bar_ranking_chart(rank_df, "institution_name_raw", "pay_multiple",
                                   "기관장-직원 보수배율 상위 10개", "배", top_n=10)
         render_or_empty(fig4)
 
-    csv_bytes = merged3.to_csv(index=False).encode("utf-8-sig")
-    st.download_button("보수·임원 데이터 다운로드", data=csv_bytes,
-                        file_name=f"pay_{FSTATE.year}_filtered.csv", mime="text/csv")
+    with st.expander("📥 데이터 다운로드 및 원자료 확인"):
+        st.dataframe(merged3, use_container_width=True)
+        csv_bytes = merged3.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("보수·임원 데이터 다운로드", data=csv_bytes,
+                            file_name=f"pay_{FSTATE.year}_filtered.csv", mime="text/csv")
