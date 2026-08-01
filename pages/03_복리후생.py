@@ -6,11 +6,11 @@ import pandas as pd
 import streamlit as st
 
 from common_data import (
-    setup_page, load_data_or_stop, get_available_years, get_filter_options,
+    setup_page, load_data_or_stop, get_available_years,
     render_common_filters, apply_common_filters, FilterState,
     welfare_total_summary, welfare_category_breakdown, workforce_summary, employee_avg_pay_summary,
     format_number, format_percent, format_amount_krw_thousand, safe_divide,
-    line_trend_chart, bar_ranking_chart, box_plot_chart, scatter_with_trend, render_or_empty,
+    line_trend_chart, bar_ranking_chart, box_plot_chart, scatter_with_trend, render_or_empty, render_scatter_or_empty,
 )
 
 setup_page("복리후생")
@@ -19,8 +19,7 @@ st.title("🎁 복리후생")
 DATA = load_data_or_stop()
 MASTER = DATA["institution_master"]
 YEARS = get_available_years(DATA)
-FILTER_OPTIONS = get_filter_options(MASTER)
-FSTATE = render_common_filters(YEARS, FILTER_OPTIONS)
+FSTATE = render_common_filters(YEARS, MASTER)
 st.divider()
 
 welfare_total_all = welfare_total_summary(DATA["welfare"])
@@ -92,14 +91,16 @@ else:
     with col_d:
         sc = merged5[["institution_name_raw", "employee_avg_pay", "welfare_per_capita"]].dropna()
         fig4 = scatter_with_trend(sc, "employee_avg_pay", "welfare_per_capita", "institution_name_raw",
-                                   "직원 평균보수 vs 1인당 복리후생비", "평균보수(천원)", "1인당 복리후생비(천원)")
-        render_or_empty(fig4)
+                                   "보수가 높은 기관이 복리후생도 후한가", "평균보수(천원)", "1인당 복리후생비(천원)")
+        render_scatter_or_empty(fig4)
 
     rank_df = merged5[["institution_name_raw", "welfare_per_capita"]].dropna()
     fig5 = bar_ranking_chart(rank_df, "institution_name_raw", "welfare_per_capita",
                               "1인당 복리후생비 상위 10개 기관", "천원", top_n=10)
     render_or_empty(fig5)
 
-    csv_bytes = merged5.to_csv(index=False).encode("utf-8-sig")
-    st.download_button("복리후생 데이터 다운로드", data=csv_bytes,
-                        file_name=f"welfare_{FSTATE.year}_filtered.csv", mime="text/csv")
+    with st.expander("📥 데이터 다운로드 및 원자료 확인"):
+        st.dataframe(merged5, use_container_width=True)
+        csv_bytes = merged5.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("복리후생 데이터 다운로드", data=csv_bytes,
+                            file_name=f"welfare_{FSTATE.year}_filtered.csv", mime="text/csv")
