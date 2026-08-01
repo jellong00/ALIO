@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from common_data import (
-    setup_page, load_data_or_stop, get_available_years, get_filter_options,
+    setup_page, load_data_or_stop, get_available_years,
     render_common_filters, apply_common_filters,
     workforce_summary, recruitment_summary, employee_avg_pay_summary, starting_pay_summary,
     executive_pay_summary, welfare_total_summary, finance_summary, compute_comparison_index,
@@ -20,8 +20,7 @@ st.title("🏢 기관 상세")
 DATA = load_data_or_stop()
 MASTER = DATA["institution_master"]
 YEARS = get_available_years(DATA)
-FILTER_OPTIONS = get_filter_options(MASTER)
-FSTATE = render_common_filters(YEARS, FILTER_OPTIONS)
+FSTATE = render_common_filters(YEARS, MASTER)
 st.divider()
 
 if FSTATE.institution_name == "전체":
@@ -86,6 +85,18 @@ else:
         elif FSTATE.comparison_basis == "동일 주무부처" and ministry:
             peer_names = set(MASTER[MASTER["ministry"] == ministry]["institution_name"])
             comp_label = f"동일 주무부처({ministry}) 평균"
+        elif FSTATE.comparison_basis == "유사 인력규모":
+            from common_data import get_size_bracket
+            sel_size = wf_y["total_workforce"].sum()
+            sel_bracket = get_size_bracket(sel_size)
+            if sel_bracket:
+                wf_current_year = wf_all[wf_all["year"] == FSTATE.year].copy()
+                wf_current_year["size_bracket"] = wf_current_year["total_workforce"].map(get_size_bracket)
+                peer_names = set(wf_current_year[wf_current_year["size_bracket"] == sel_bracket]["institution_name_raw"])
+                comp_label = f"유사 인력규모({sel_bracket}) 평균"
+            else:
+                peer_names = set(MASTER["institution_name"])
+                comp_label = "전체 기관 평균"
         else:
             peer_names = set(MASTER["institution_name"])
             comp_label = "전체 기관 평균"
@@ -113,6 +124,8 @@ else:
         fig3 = comparison_bullet_chart(labels, indices, f"{sel} 비교지수 (100 = {comp_label})", "지수")
         render_or_empty(fig3)
 
-        csv_bytes = wf_y.to_csv(index=False).encode("utf-8-sig")
-        st.download_button("기관 상세 데이터 다운로드", data=csv_bytes,
-                            file_name=f"institution_detail_{sel}.csv", mime="text/csv")
+        with st.expander("📥 데이터 다운로드 및 원자료 확인"):
+            st.dataframe(wf_y, use_container_width=True)
+            csv_bytes = wf_y.to_csv(index=False).encode("utf-8-sig")
+            st.download_button("기관 상세 데이터 다운로드", data=csv_bytes,
+                                file_name=f"institution_detail_{sel}.csv", mime="text/csv")
