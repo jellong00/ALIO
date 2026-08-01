@@ -6,11 +6,11 @@ import pandas as pd
 import streamlit as st
 
 from common_data import (
-    setup_page, load_data_or_stop, get_available_years, get_filter_options,
+    setup_page, load_data_or_stop, get_available_years,
     render_common_filters, apply_common_filters,
     workforce_summary, recruitment_summary,
     format_number, format_percent, safe_divide,
-    line_trend_chart, bar_ranking_chart, scatter_with_trend, grouped_bar_chart, render_or_empty,
+    line_trend_chart, bar_ranking_chart, scatter_with_trend, grouped_bar_chart, render_or_empty, render_scatter_or_empty,
 )
 
 setup_page("인력·채용")
@@ -19,8 +19,7 @@ st.title("👥 인력·채용")
 DATA = load_data_or_stop()
 MASTER = DATA["institution_master"]
 YEARS = get_available_years(DATA)
-FILTER_OPTIONS = get_filter_options(MASTER)
-FSTATE = render_common_filters(YEARS, FILTER_OPTIONS)
+FSTATE = render_common_filters(YEARS, MASTER)
 st.divider()
 
 wf_all = workforce_summary(DATA["workforce"])
@@ -77,9 +76,11 @@ else:
     with col_d:
         scatter_df = merged_y[["institution_name_raw", "fill_rate_pct", "new_hire_rate_pct"]].dropna()
         fig4 = scatter_with_trend(scatter_df, "fill_rate_pct", "new_hire_rate_pct", "institution_name_raw",
-                                   "정원충족률 vs 신규채용률", "정원충족률(%)", "신규채용률(%)")
-        render_or_empty(fig4)
+                                   "현재 인력 규모에 비해 신규채용은 활발한가", "정원충족률(%)", "신규채용률(%)")
+        render_scatter_or_empty(fig4)
 
-    csv_bytes = merged_y.to_csv(index=False).encode("utf-8-sig")
-    st.download_button("인력·채용 데이터 다운로드", data=csv_bytes,
-                        file_name=f"workforce_{FSTATE.year}_filtered.csv", mime="text/csv")
+    with st.expander("📥 데이터 다운로드 및 원자료 확인"):
+        st.dataframe(merged_y, use_container_width=True)
+        csv_bytes = merged_y.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("인력·채용 데이터 다운로드", data=csv_bytes,
+                            file_name=f"workforce_{FSTATE.year}_filtered.csv", mime="text/csv")
