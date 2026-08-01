@@ -1,1 +1,164 @@
-# ALIO
+# 공공기관 인력·보상·복지·재정 현황 대시보드
+
+공공기관 경영정보 공개 데이터(임직원 수, 신규채용, 직원 평균보수, 임원연봉, 기관장 업무추진비,
+복리후생, 일·가정 양립 지원제도, 수입·지출, 법인세)를 통합하여 비교·분석하는 Streamlit 대시보드.
+강의실 대형 화면(1920×1080)에서 세로 스크롤 없이 핵심 지표를 확인할 수 있도록 설계했다.
+
+## 1. 폴더 구조
+
+```text
+public_institution_dashboard/
+├─ app.py                     # 메인 Streamlit 앱 (7개 탭)
+├─ requirements.txt
+├─ README.md
+├─ data/
+│  ├─ raw/                    # 원본 엑셀 10개 (직접 배치)
+│  └─ processed/               # 전처리 결과 Parquet + 검증 리포트
+├─ scripts/
+│  ├─ inspect_excel.py         # 1단계: 구조 탐색
+│  ├─ preprocess.py             # 2단계: 전처리 (Parquet 생성)
+│  └─ validate_data.py          # 데이터 검증
+├─ utils/
+│  ├─ preprocessing.py          # 공통 전처리 함수 + 항목명 매핑
+│  ├─ data_loader.py            # 캐시된 Parquet 로더
+│  ├─ metrics.py                # 파생지표 계산 (분자/분모 명세 포함)
+│  ├─ filters.py                # 공통 필터 위젯
+│  ├─ charts.py                 # Plotly 차트 헬퍼
+│  └─ formatting.py             # 숫자/단위 포맷팅
+└─ .streamlit/config.toml
+```
+
+## 2. 원본 파일 배치 방법
+
+`data/raw/` 폴더에 다음 10개 엑셀 파일을 그대로 넣는다 (파일명 변경 금지).
+
+```text
+그밖의_복리후생제도_등의_운영현황.xlsx
+기관장업무추진비.xlsx
+법인세정보.xlsx
+복리후생비.xlsx
+수입지출현황.xlsx
+신규채용현황.xlsx
+일가정_양립_지원제도_운영현황.xlsx
+임원연봉.xlsx
+임직원수현황.xlsx
+직원평균보수현황.xlsx
+```
+
+## 3. 가상환경 생성
+
+```bash
+python3 -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+```
+
+## 4. 패키지 설치
+
+```bash
+pip install -r requirements.txt
+```
+
+## 5. 전처리 실행 순서
+
+```bash
+python scripts/inspect_excel.py     # data/processed/excel_structure_report.json 생성
+python scripts/preprocess.py        # data/processed/*.parquet 생성
+python scripts/validate_data.py     # validation_report.csv, unmatched_institutions.csv 생성
+```
+
+## 6. Streamlit 로컬 실행
+
+```bash
+streamlit run app.py
+```
+
+## 7. GitHub 업로드
+
+```bash
+git init
+git add .
+git commit -m "공공기관 경영정보 대시보드 초기 커밋"
+git branch -M main
+git remote add origin <레포지토리 URL>
+git push -u origin main
+```
+
+`data/processed/*.parquet` 는 `.gitignore` 에 추가하고, 배포 시 Streamlit Cloud 빌드 단계에서
+`python scripts/preprocess.py` 를 실행하도록 구성하는 것을 권장한다 (또는 Parquet 파일 자체를
+레포지토리에 함께 커밋해도 무방하다).
+
+## 8. Streamlit Community Cloud 배포
+
+1. https://share.streamlit.io 접속 후 GitHub 계정 연동
+2. "New app" → 레포지토리/브랜치/`app.py` 경로 선택
+3. Parquet 파일을 커밋하지 않았다면, "Advanced settings" 에서 배포 후 콘솔로 접속해
+   `python scripts/preprocess.py` 를 1회 실행하거나, 사전에 로컬에서 생성한 Parquet 파일을 함께 커밋
+4. 배포 완료 후 발급된 URL로 접속
+
+## 9. 새로운 연도 자료 추가 방법
+
+1. `data/raw/` 의 해당 엑셀 파일에 새 연도 열(예: `2027년`)이 포함된 최신 파일로 교체
+2. `python scripts/preprocess.py` 재실행 (연도 열은 정규식으로 자동 탐지되므로 코드 수정 불필요)
+3. `python scripts/validate_data.py` 로 검증 후 대시보드 재기동
+
+## 10. 엑셀 시트 구조가 변경되었을 때 수정할 위치
+
+- 시트가 추가/삭제된 경우: `scripts/inspect_excel.py` 를 재실행해 `excel_structure_report.json` 으로
+  새 구조를 먼저 확인한다 (시트명을 코드에 고정하지 않으므로 대부분 자동 인식됨).
+- 열 이름 자체가 바뀐 경우(`기관명` → `기관명칭` 등): `utils/preprocessing.py` 의
+  `read_sheet_raw()`, `melt_wide_year_sheet()` 내 `기관명/기관유형/주무부처` 등 컬럼명 상수를 수정한다.
+- 새로운 비표준 구조(연도-와이드가 아닌 시트)가 생기면 `scripts/preprocess.py` 의
+  `process_work_family()` 처럼 별도 분기 처리 함수를 추가한다.
+- 항목명이 변경된 경우 `utils/metrics.py` 상단 주석의 "분자/분모 원문 항목명 명세"와
+  각 `_pivot_sum()` 호출부의 문자열을 함께 수정한다.
+
+## 11. 주요 파생지표 계산식
+
+```text
+정원충족률          = 총 현원 / 총 정원 × 100
+신규채용률          = 총 신규채용 / 임직원 현원 × 100
+여성인력 비율        = 여성 현원 / 전체 현원 × 100
+기관장-직원 보수배율  = 기관장 총연봉 / 직원 평균보수
+직원 1인당 업무추진비 = 기관장 업무추진비 / 임직원 현원
+1인당 복리후생비      = 총복리후생비 / 임직원 현원
+복리후생비 증감률      = (당해연도 - 전년도) / 전년도 × 100
+정부지원 의존도        = 정부지원수입 / 총수입 × 100
+수지                  = 총수입 - 총지출
+보수적 자체수입        = 기타사업수입 + 부대수입 + 기타
+광의 자체수입          = 총수입 - 정부지원수입 - 출자금 - 차입금
+비교지수              = 선택기관 값 / 비교집단 평균 × 100
+```
+
+각 지표의 분자/분모에 사용된 원자료 항목명 원문은 `utils/metrics.py` 상단 docstring에 상세히 기록되어 있다.
+
+## 12. 공공기관 총수입과 일반 기업 매출액의 차이
+
+공공기관의 '총수입'에는 정부출연금·보조금·부담금 등 정부지원수입이 상당 비중을 차지하는 경우가 많아,
+시장에서 재화·용역을 판매해 얻는 민간기업의 매출액과 동일한 개념으로 취급할 수 없다. 특히 기금관리형
+준정부기관은 기금계정의 이전수입이 총수입의 대부분을 차지하는 등, 기관의 실제 '영업활동' 규모를
+가늠하기 어려운 경우가 많다. 본 대시보드는 이 차이를 명시하기 위해 '매출액' 대신 '총수입/사업수입/자체수입'
+용어를 사용한다.
+
+## 13. 오류 발생 시 점검사항
+
+1. `전처리된 데이터를 찾을 수 없습니다` 오류 → `python scripts/preprocess.py` 를 먼저 실행했는지 확인
+2. 특정 파일만 처리되지 않는 경우 → 전처리 실행 로그에서 `WARNING`/`ERROR` 메시지 확인
+   (해당 파일만 건너뛰고 나머지는 정상 처리되도록 설계되어 있음)
+3. 선택한 필터 조건에서 "데이터가 없습니다" 메시지가 뜨는 경우 → 기관유형/주무부처/연도 조합을 완화
+4. 그래프가 비어 있는 경우 → 원자료에 해당 지표의 실제 값이 모두 결측인지 확인
+   (결측은 0으로 대체하지 않으므로, 원자료 자체에 값이 없으면 그래프도 비어있는 것이 정상)
+5. 기관 비교가 이상해 보이는 경우 → `data/processed/unmatched_institutions.csv` 에서 동일 기관이
+   다른 표기로 나뉘어 있는지 확인 (완전한 기관코드가 없어 기관명 기준으로 결합하기 때문에 발생 가능)
+
+## 14. 알려진 한계 (중요)
+
+- **기관 식별체계**: 원자료에 기관코드가 없어 정제된 기관명을 결합 키로 사용한다. 완전히 동일하지 않은
+  표기(공백, 법인 접두어 차이 등)는 `unmatched_institutions.csv` 로 별도 확인 목록을 제공하지만,
+  100% 자동 통일을 보장하지는 않는다.
+- **정원/현원 합계 정의**: `임직원수현황.xlsx` 의 "임직원 총계(A+B+C)" 표기에 근거해 정원 총계를
+  A(상임임원정원)+B(일반정규직 정원)+C(무기계약직 정원) 의 합으로 정의했다. 이는 원자료 항목명에서
+  유추한 것으로, 기관에 따라 세부 정의가 다를 가능성이 있다.
+- **신규채용 총계**: 상임임원 신규채용, 청년인턴 채용은 별도 성격으로 보아 "총 신규채용"에서 제외했다.
+- **총복리후생비 vs 항목별 세부내역**: 두 집계 방식(예산상 복리후생비 시트 / 3-1~3-13 세부시트)의
+  합계가 정확히 일치하지 않을 수 있다. 이중 합산을 방지하기 위해 두 값을 별도로 관리했다.
+- **2026년 자료**: 일부 파일에 2026년 열이 존재하나 연중 누계 또는 잠정치일 수 있다.
