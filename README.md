@@ -4,6 +4,11 @@
 복리후생, 일·가정 양립 지원제도, 수입·지출, 법인세)를 통합하여 비교·분석하는 Streamlit 대시보드.
 강의실 대형 화면(1920×1080)에서 세로 스크롤 없이 핵심 지표를 확인할 수 있도록 설계했다.
 
+**별도 전처리 스크립트를 미리 실행할 필요가 없다.** `data/raw/` 에 원본 엑셀 10개만 넣고
+`streamlit run app.py` 를 실행하면, 앱이 시작될 때 원본을 직접 읽어 정제하고 그 결과를
+`st.cache_data` 로 메모리에 캐싱한다 (파일 용량이 크지 않아 몇 초 내로 끝난다). GitHub에 올릴 때도
+**원본 엑셀 + 코드만 올리면 된다** (Parquet 파일을 함께 올릴 필요 없음).
+
 ## 1. 폴더 구조
 
 ```text
@@ -12,15 +17,16 @@ public_institution_dashboard/
 ├─ requirements.txt
 ├─ README.md
 ├─ data/
-│  ├─ raw/                    # 원본 엑셀 10개 (직접 배치)
-│  └─ processed/               # 전처리 결과 Parquet + 검증 리포트
+│  ├─ raw/                    # 원본 엑셀 10개 (여기만 채우면 됨)
+│  └─ processed/               # (선택) Parquet 캐시 + 검증 리포트가 저장되는 곳, 비어 있어도 무방
 ├─ scripts/
-│  ├─ inspect_excel.py         # 1단계: 구조 탐색
-│  ├─ preprocess.py             # 2단계: 전처리 (Parquet 생성)
-│  └─ validate_data.py          # 데이터 검증
+│  ├─ inspect_excel.py         # (선택) 구조 탐색 리포트 생성
+│  ├─ preprocess.py             # (선택) Parquet 캐시를 미리 만들고 싶을 때만 실행
+│  └─ validate_data.py          # 데이터 검증 (Parquet 없어도 원본에서 즉석 생성해 검증함)
 ├─ utils/
-│  ├─ preprocessing.py          # 공통 전처리 함수 + 항목명 매핑
-│  ├─ data_loader.py            # 캐시된 Parquet 로더
+│  ├─ preprocessing.py          # 시트 단위 정제 공통 함수 + 항목명 매핑
+│  ├─ pipeline.py                # 파일별 전처리 함수 모음 (app.py 와 scripts 가 공유)
+│  ├─ data_loader.py            # 캐시 로더 (원본 엑셀 직접 로드 우선, Parquet은 있으면 사용)
 │  ├─ metrics.py                # 파생지표 계산 (분자/분모 명세 포함)
 │  ├─ filters.py                # 공통 필터 위젯
 │  ├─ charts.py                 # Plotly 차트 헬퍼
@@ -30,7 +36,7 @@ public_institution_dashboard/
 
 ## 2. 원본 파일 배치 방법
 
-`data/raw/` 폴더에 다음 10개 엑셀 파일을 그대로 넣는다 (파일명 변경 금지).
+`data/raw/` 폴더에 다음 10개 엑셀 파일을 그대로 넣는다 (파일명 변경 금지). **이것만 있으면 충분하다.**
 
 ```text
 그밖의_복리후생제도_등의_운영현황.xlsx
@@ -58,12 +64,21 @@ source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## 5. 전처리 실행 순서
+## 5. (선택) 구조 탐색 / 검증
+
+전처리를 미리 돌릴 필요는 없지만, 원자료 구조를 사람이 직접 확인하거나 검증 리포트를 뽑고 싶다면:
 
 ```bash
 python scripts/inspect_excel.py     # data/processed/excel_structure_report.json 생성
-python scripts/preprocess.py        # data/processed/*.parquet 생성
 python scripts/validate_data.py     # validation_report.csv, unmatched_institutions.csv 생성
+```
+
+`scripts/preprocess.py` 는 대용량 데이터에서 매번 엑셀을 다시 읽는 게 느릴 때만 실행하면 된다
+(Parquet 캐시를 만들어두면 `data_loader.py` 가 그것을 우선 사용한다). 지금 데이터 규모(수 MB)에서는
+실행하지 않아도 무방하다.
+
+```bash
+python scripts/preprocess.py        # (선택) data/processed/*.parquet 생성
 ```
 
 ## 6. Streamlit 로컬 실행
@@ -83,23 +98,22 @@ git remote add origin <레포지토리 URL>
 git push -u origin main
 ```
 
-`data/processed/*.parquet` 는 `.gitignore` 에 추가하고, 배포 시 Streamlit Cloud 빌드 단계에서
-`python scripts/preprocess.py` 를 실행하도록 구성하는 것을 권장한다 (또는 Parquet 파일 자체를
-레포지토리에 함께 커밋해도 무방하다).
+**`data/raw/*.xlsx` 원본 엑셀만 커밋하면 충분하다.** `data/processed/*.parquet` 는 커밋할 필요가
+없다 (원하면 `.gitignore` 에 추가). 앱이 배포 직후 첫 요청에서 원본을 읽어 자동으로 정제하기 때문에
+별도 빌드 단계나 전처리 스크립트 실행이 필요 없다.
 
 ## 8. Streamlit Community Cloud 배포
 
 1. https://share.streamlit.io 접속 후 GitHub 계정 연동
-2. "New app" → 레포지토리/브랜치/`app.py` 경로 선택
-3. Parquet 파일을 커밋하지 않았다면, "Advanced settings" 에서 배포 후 콘솔로 접속해
-   `python scripts/preprocess.py` 를 1회 실행하거나, 사전에 로컬에서 생성한 Parquet 파일을 함께 커밋
-4. 배포 완료 후 발급된 URL로 접속
+2. "New app" → 레포지토리/브랜치/`app.py` 경로 선택 → Deploy
+3. 배포 완료 후 최초 접속 시 "원본 엑셀에서 데이터를 정제하는 중입니다" 스피너가 잠깐 뜨고
+   (몇 초 내 완료), 이후로는 캐시되어 즉시 로딩된다. 별도 콘솔 작업이 전혀 필요 없다.
 
 ## 9. 새로운 연도 자료 추가 방법
 
 1. `data/raw/` 의 해당 엑셀 파일에 새 연도 열(예: `2027년`)이 포함된 최신 파일로 교체
-2. `python scripts/preprocess.py` 재실행 (연도 열은 정규식으로 자동 탐지되므로 코드 수정 불필요)
-3. `python scripts/validate_data.py` 로 검증 후 대시보드 재기동
+2. 사이드바의 "🔄 캐시 초기화" 버튼을 누르거나 앱을 재시작하면 자동으로 새 데이터 반영
+   (연도 열은 정규식으로 자동 탐지되므로 코드 수정 불필요)
 
 ## 10. 엑셀 시트 구조가 변경되었을 때 수정할 위치
 
@@ -107,7 +121,7 @@ git push -u origin main
   새 구조를 먼저 확인한다 (시트명을 코드에 고정하지 않으므로 대부분 자동 인식됨).
 - 열 이름 자체가 바뀐 경우(`기관명` → `기관명칭` 등): `utils/preprocessing.py` 의
   `read_sheet_raw()`, `melt_wide_year_sheet()` 내 `기관명/기관유형/주무부처` 등 컬럼명 상수를 수정한다.
-- 새로운 비표준 구조(연도-와이드가 아닌 시트)가 생기면 `scripts/preprocess.py` 의
+- 새로운 비표준 구조(연도-와이드가 아닌 시트)가 생기면 `utils/pipeline.py` 의
   `process_work_family()` 처럼 별도 분기 처리 함수를 추가한다.
 - 항목명이 변경된 경우 `utils/metrics.py` 상단 주석의 "분자/분모 원문 항목명 명세"와
   각 `_pivot_sum()` 호출부의 문자열을 함께 수정한다.
@@ -141,14 +155,15 @@ git push -u origin main
 
 ## 13. 오류 발생 시 점검사항
 
-1. `전처리된 데이터를 찾을 수 없습니다` 오류 → `python scripts/preprocess.py` 를 먼저 실행했는지 확인
-2. 특정 파일만 처리되지 않는 경우 → 전처리 실행 로그에서 `WARNING`/`ERROR` 메시지 확인
+1. `원본 엑셀 파일을 찾을 수 없습니다` 오류 → `data/raw/` 에 10개 파일이 정확한 이름으로 있는지 확인
+2. 특정 파일만 처리되지 않는 경우 → 터미널/앱 로그에서 `WARNING`/`ERROR` 메시지 확인
    (해당 파일만 건너뛰고 나머지는 정상 처리되도록 설계되어 있음)
 3. 선택한 필터 조건에서 "데이터가 없습니다" 메시지가 뜨는 경우 → 기관유형/주무부처/연도 조합을 완화
 4. 그래프가 비어 있는 경우 → 원자료에 해당 지표의 실제 값이 모두 결측인지 확인
    (결측은 0으로 대체하지 않으므로, 원자료 자체에 값이 없으면 그래프도 비어있는 것이 정상)
-5. 기관 비교가 이상해 보이는 경우 → `data/processed/unmatched_institutions.csv` 에서 동일 기관이
-   다른 표기로 나뉘어 있는지 확인 (완전한 기관코드가 없어 기관명 기준으로 결합하기 때문에 발생 가능)
+5. 기관 비교가 이상해 보이는 경우 → `python scripts/validate_data.py` 실행 후
+   `data/processed/unmatched_institutions.csv` 에서 동일 기관이 다른 표기로 나뉘어 있는지 확인
+6. 데이터를 갱신했는데 화면이 그대로인 경우 → 사이드바의 "🔄 캐시 초기화" 버튼 클릭
 
 ## 14. 알려진 한계 (중요)
 
@@ -162,3 +177,6 @@ git push -u origin main
 - **총복리후생비 vs 항목별 세부내역**: 두 집계 방식(예산상 복리후생비 시트 / 3-1~3-13 세부시트)의
   합계가 정확히 일치하지 않을 수 있다. 이중 합산을 방지하기 위해 두 값을 별도로 관리했다.
 - **2026년 자료**: 일부 파일에 2026년 열이 존재하나 연중 누계 또는 잠정치일 수 있다.
+- **캐싱 방식**: 원본 엑셀을 앱 시작 시 직접 읽으므로, 데이터가 수십 MB 이상으로 커지면 최초 로딩이
+  느려질 수 있다. 이 경우 `python scripts/preprocess.py` 를 실행해 Parquet 캐시를 만들어두면
+  `data_loader.py` 가 이를 우선 사용해 로딩 속도를 개선한다.
