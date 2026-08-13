@@ -233,11 +233,46 @@ def _build_panel() -> pd.DataFrame:
     return panel
 
 
+def _diagnose(key: str) -> dict:
+    """key에 해당하는 데이터셋이 비어있는 이유를 진단한다 (오류를 던지지 않음)."""
+    fname, sheet, extra_ids = FILES[key]
+    path = _resolve_path(fname)
+    info = {"데이터셋": key, "파일명": fname, "찾은 경로": path, "파일 존재": os.path.exists(path)}
+
+    if not info["파일 존재"]:
+        return info
+
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(path, read_only=True)
+        info["실제 시트 목록"] = wb.sheetnames
+        info["찾는 시트명"] = sheet
+        info["시트 일치 여부"] = sheet in wb.sheetnames
+    except Exception as e:
+        info["워크북 열기 오류"] = str(e)
+        return info
+
+    if not info["시트 일치 여부"]:
+        return info
+
+    try:
+        raw = pd.read_excel(path, sheet_name=sheet, header=None)
+        info["원본 시트 shape"] = raw.shape
+        hdr_idx = _find_header_row(raw)
+        info["헤더 행 위치"] = hdr_idx
+        info["헤더 행 내용"] = raw.iloc[hdr_idx].tolist()
+    except Exception as e:
+        info["시트 읽기 오류"] = str(e)
+
+    return info
+
+
 def load_dataset(key: str) -> pd.DataFrame:
     """
     데이터셋을 불러온다.
     key가 'panel'이면 기관-연도 병합 패널을, 그 외에는 해당 데이터셋의
-    long(연도) 포맷을 반환한다. 원본 파일이 없으면 안내 메시지를 표시한다.
+    long(연도) 포맷을 반환한다. 원본 파일이 없거나 읽기에 실패하면
+    구체적인 진단 정보와 함께 안내 메시지를 표시한다.
     """
     if key == "panel":
         df = _build_panel()
@@ -247,13 +282,19 @@ def load_dataset(key: str) -> pd.DataFrame:
         raise ValueError(f"알 수 없는 데이터셋: {key}")
 
     if df.empty:
-        missing = [fname for fname, _, _ in FILES.values() if not os.path.exists(_resolve_path(fname))]
-        existing = os.listdir(RAW_DIR) if os.path.isdir(RAW_DIR) else []
-        st.error(
-            f"원본 데이터를 찾을 수 없습니다. `{RAW_DIR}/` 폴더를 확인해주세요.\n\n"
-            f"- 찾지 못한 파일: {missing}\n"
-            f"- `{RAW_DIR}/` 폴더에 실제로 있는 파일: {existing}"
-        )
+        # panel은 여러 데이터셋을 조합하므로, 비어있는 원인이 되는
+        # 첫 번째 데이터셋을 찾아 진단한다.
+        if key == "panel":
+            check_keys = ["finance", "tax", "employees", "compensation",
+                          "executive_pay", "recruitment", "welfare", "business_expense"]
+            target_key = next((k for k in check_keys if _load_long(k).empty), "finance")
+        else:
+            target_key = key
+
+        info = _diagnose(target_key)
+        st.error(f"'{target_key}' 데이터셋을 불러오지 못했습니다. 아래 진단 정보를 확인해주세요.")
+        st.json(info)
+
     return df
 
 
