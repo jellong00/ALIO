@@ -2,7 +2,7 @@
 """공통 상수"""
 
 DEFAULT_YEAR = 2025
-RAW_DIR = "data/raw"
+RAW_DIR = "data"
 
 YEAR_2026_WARNING = (
     "2026년 자료는 연중 공시자료 또는 잠정값을 포함할 수 있으므로 "
