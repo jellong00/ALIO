@@ -47,7 +47,7 @@ from utils.data import raw_files_exist
 
 if not raw_files_exist():
     st.warning(
-        "⚠️ `data/raw/` 폴더에 필요한 원본 Excel 파일이 없습니다. "
+        "⚠️ `data/` 폴더에 필요한 원본 Excel 파일이 없습니다. "
         "README.md를 참고하여 파일을 넣어주세요."
     )
 else:
