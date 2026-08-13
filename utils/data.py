@@ -13,6 +13,7 @@ parquet 캐시 파일 없이, Streamlit의 @st.cache_data로 세션 내에서만
 
 import os
 import re
+import unicodedata
 
 import numpy as np
 import pandas as pd
@@ -34,6 +35,27 @@ FILES = {
     "business_expense": ("기관장업무추진비.xlsx", "기관장업무추진비", ["항목"]),
     "other_welfare": ("그밖의_복리후생제도_등의_운영현황.xlsx", "1-2. 휴직급여지급현황", ["구분", "항목"]),
 }
+
+
+def _resolve_path(fname: str) -> str:
+    """
+    폴더 안에서 파일을 찾는다. 한글 파일명은 macOS(NFD)와 Linux/Windows(NFC) 간
+    유니코드 정규화 방식이 달라 화면상 이름이 같아도 실제 바이트가 다를 수 있으므로,
+    정확히 일치하지 않으면 정규화 후 비교하여 찾는다.
+    """
+    direct = os.path.join(RAW_DIR, fname)
+    if os.path.exists(direct):
+        return direct
+
+    if not os.path.isdir(RAW_DIR):
+        return direct
+
+    target = unicodedata.normalize("NFC", fname)
+    for f in os.listdir(RAW_DIR):
+        if unicodedata.normalize("NFC", f) == target:
+            return os.path.join(RAW_DIR, f)
+
+    return direct
 
 
 def normalize_institution_name(name):
@@ -71,7 +93,7 @@ def _clean_sheet(raw_df):
 def _load_long(key: str) -> pd.DataFrame:
     """지정된 데이터셋을 raw Excel에서 읽어 long(연도) 포맷으로 반환한다."""
     fname, sheet, extra_ids = FILES[key]
-    path = os.path.join(RAW_DIR, fname)
+    path = _resolve_path(fname)
     if not os.path.exists(path):
         return pd.DataFrame()
 
@@ -225,11 +247,15 @@ def load_dataset(key: str) -> pd.DataFrame:
         raise ValueError(f"알 수 없는 데이터셋: {key}")
 
     if df.empty:
+        missing = [fname for fname, _, _ in FILES.values() if not os.path.exists(_resolve_path(fname))]
+        existing = os.listdir(RAW_DIR) if os.path.isdir(RAW_DIR) else []
         st.error(
-            "원본 데이터를 찾을 수 없습니다. `data/` 폴더에 필요한 Excel 파일이 있는지 확인해주세요."
+            f"원본 데이터를 찾을 수 없습니다. `{RAW_DIR}/` 폴더를 확인해주세요.\n\n"
+            f"- 찾지 못한 파일: {missing}\n"
+            f"- `{RAW_DIR}/` 폴더에 실제로 있는 파일: {existing}"
         )
     return df
 
 
 def raw_files_exist() -> bool:
-    return all(os.path.exists(os.path.join(RAW_DIR, fname)) for fname, _, _ in FILES.values())
+    return all(os.path.exists(_resolve_path(fname)) for fname, _, _ in FILES.values())
