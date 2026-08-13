@@ -2,7 +2,7 @@
 """
 데이터 로딩 모듈
 ================
-원본 Excel(data/raw/*.xlsx)을 직접 읽어 정제한다. 별도의 전처리 스크립트나
+원본 Excel(data/*.xlsx)을 직접 읽어 정제한다. 별도의 전처리 스크립트나
 parquet 캐시 파일 없이, Streamlit의 @st.cache_data로 세션 내에서만 캐싱한다.
 
 원자료 시트는 2단 헤더 구조를 가진다.
@@ -226,7 +226,7 @@ def load_dataset(key: str) -> pd.DataFrame:
 
     if df.empty:
         st.error(
-            "원본 데이터를 찾을 수 없습니다. `data/raw/` 폴더에 필요한 Excel 파일이 있는지 확인해주세요."
+            "원본 데이터를 찾을 수 없습니다. `data/` 폴더에 필요한 Excel 파일이 있는지 확인해주세요."
         )
     return df
 
