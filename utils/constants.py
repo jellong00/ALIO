@@ -30,6 +30,3 @@ TYPE_COLOR_MAP = {
     "준정부기관(위탁집행형)": "#0D9488",
     "기타공공기관": "#64748B",
 }
-
-CHART_HEIGHT_COMPACT = 260
-CHART_HEIGHT_MAIN = 380
