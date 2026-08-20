@@ -135,6 +135,46 @@ def plot_scatter_ols(df: pd.DataFrame, x_col: str, y_col: str, title=""):
     return fig
 
 
+def plot_relationship_scatter(df: pd.DataFrame, x_col: str, y_col: str, title="",
+                                color_col=None, size_col=None, log_x=False, log_y=False,
+                                trendline=False, height=380):
+    """변수 관계 탭 전용: 색상/버블크기/로그축/추세선을 모두 지원하는 산점도."""
+    plot_df = df.copy()
+    plot_df[x_col] = pd.to_numeric(plot_df[x_col], errors="coerce")
+    plot_df[y_col] = pd.to_numeric(plot_df[y_col], errors="coerce")
+    subset = [x_col, y_col] + [c for c in [color_col, size_col] if c]
+    plot_df = plot_df.dropna(subset=subset)
+
+    if log_x:
+        plot_df = plot_df[plot_df[x_col] > 0]
+    if log_y:
+        plot_df = plot_df[plot_df[y_col] > 0]
+
+    kwargs = dict(opacity=0.7)
+    if color_col:
+        kwargs["color"] = color_col
+        kwargs["color_discrete_map"] = TYPE_COLOR_MAP
+    if size_col:
+        kwargs["size"] = size_col
+        kwargs["size_max"] = 30
+    if trendline:
+        kwargs["trendline"] = "ols"
+
+    fig = px.scatter(plot_df, x=x_col, y=y_col, **kwargs)
+    if log_x:
+        fig.update_xaxes(type="log")
+    if log_y:
+        fig.update_yaxes(type="log")
+    _apply_base_layout(fig, title, xaxis_title=x_col, yaxis_title=y_col)
+    fig.update_layout(height=height)
+    return fig, plot_df
+
+
+def apply_compact_height(fig, height=260):
+    fig.update_layout(height=height)
+    return fig
+
+
 def plot_correlation_heatmap(corr_matrix: pd.DataFrame, title=""):
     fig = px.imshow(
         corr_matrix,
