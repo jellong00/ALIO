@@ -1,82 +1,91 @@
-# -*- coding: utf-8 -*-
-"""
-홈 - 공공기관을 숫자로 읽다
-============================
-단순 데이터 소개가 아니라, 이 대시보드를 어떤 방식으로 활용할지 안내하는
-수업용 진입 화면.
-"""
-
 import streamlit as st
+from utils.data_cleaner import get_full_panel
 
-from common_data import load_dataset, raw_files_exist
-from utils.style import page_setup
-from utils.variables import ALL_VARIABLES
-from utils.questions import HOME_QUESTIONS, CORE_CONCEPTS
-
-page_setup("🏛️ 공공기관을 숫자로 읽다")
-
-st.markdown("#### 공공기관 경영정보를 이용한 계량분석 데이터 탐색")
-st.write(
-    "기관의 규모, 고용, 보수, 복지, 수입·지출, 정부지원, 법인세 정보를 결합하여 "
-    "공공기관 간 차이와 변수 간 관계를 살펴봅니다."
+st.set_page_config(
+    page_title="공공기관 계량분석 대시보드",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-if not raw_files_exist():
-    st.warning("⚠️ `data/` 폴더에 필요한 원본 Excel 파일이 없습니다. README.md를 참고해 파일을 넣어주세요.")
-    st.stop()
-
-panel = load_dataset("panel")
-if panel.empty:
-    st.stop()
-
-# ---------------------------------------------------------------------------
-# 데이터 규모 KPI
-# ---------------------------------------------------------------------------
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("분석 기관 수", f"{panel['기관명'].nunique():,}")
-k2.metric("분석 연도", f"{int(panel['연도'].min())}–{int(panel['연도'].max())}")
-k3.metric("전체 관측치 수(기관×연도)", f"{len(panel):,}")
-k4.metric("사용 가능한 핵심 변수 수", f"{len(ALL_VARIABLES)}")
-
+st.title("📊 공공기관 계량분석 대시보드")
+st.markdown(
+    "##### 기관 특성 · 재정 구조 · 조직 운영 · 인사 결과를 연결한 공공기관 데이터 분석"
+)
 st.divider()
 
-# ---------------------------------------------------------------------------
-# 데이터 영역 소개
-# ---------------------------------------------------------------------------
-st.markdown("###### 이 대시보드가 다루는 데이터 영역")
-areas = [
-    ("인력·채용", "임직원 수, 정원충족률, 신규채용률, 여성·청년·장애인 채용"),
-    ("보수·임원", "직원 평균보수, 신입초임, 근속연수, 기관장 연봉, 보수배율"),
-    ("복지·일가정", "1인당 복리후생비, 육아휴직 이용률, 직장어린이집"),
-    ("수입·지출", "총수입·총지출 구조, 정부지원수입, 사업수입, 인건비"),
-    ("정부지원", "정부지원 의존도, 자체수입(보수적/광의)"),
-    ("법인세", "과세표준, 산출세액, 세액공제, 결정세액"),
-]
-cols = st.columns(6)
-for col, (title, desc) in zip(cols, areas):
-    with col:
-        st.markdown(f"**{title}**")
-        st.caption(desc)
+with st.spinner("데이터를 불러오는 중입니다..."):
+    panel = get_full_panel()
+
+col1, col2 = st.columns([1.1, 1])
+
+with col1:
+    st.markdown("### 분석 프레임")
+    st.markdown(
+        """
+<div style="line-height:2.1; font-size:1.05rem;">
+
+<div style="background:#EEF3FB; border:2px solid #4C78A8; border-radius:10px; padding:14px 18px; margin-bottom:6px;">
+<b>① 기관 특성</b><br>
+<span style="color:#555;">기관유형 · 주무부처 · 기관규모 · 인력구조</span>
+</div>
+
+<div style="text-align:center; font-size:1.4rem; color:#4C78A8;">↓</div>
+
+<div style="background:#FBF3EE; border:2px solid #E07B39; border-radius:10px; padding:14px 18px; margin-bottom:6px;">
+<b>② 재정 구조</b><br>
+<span style="color:#555;">총수입 · 총지출 · 정부지원의존도 · 법인세</span>
+</div>
+
+<div style="text-align:center; font-size:1.4rem; color:#E07B39;">↓</div>
+
+<div style="background:#EEFBF1; border:2px solid #2CA02C; border-radius:10px; padding:14px 18px; margin-bottom:6px;">
+<b>③ 조직 운영</b><br>
+<span style="color:#555;">직원·임원 보수 · 복리후생 · 기관장업무추진비</span>
+</div>
+
+<div style="text-align:center; font-size:1.4rem; color:#2CA02C;">↓</div>
+
+<div style="background:#F5EEFB; border:2px solid #9467BD; border-radius:10px; padding:14px 18px;">
+<b>④ 인사 결과</b><br>
+<span style="color:#555;">신규채용 · 여성채용 · 육아휴직 · 일가정 양립</span>
+</div>
+
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+with col2:
+    st.info(
+        "⚠️ **이 흐름은 인과관계를 전제하지 않습니다.**\n\n"
+        "데이터에서 관찰되는 차이와 관계를 탐색하고, 계량모형을 이용하여 "
+        "어떤 관계가 다른 조건을 통제한 후에도 유지되는지 검토하기 위한 "
+        "**분석 가설 프레임**입니다.\n\n"
+        "회귀분석 결과의 통계적 유의성은 인과효과를 자동으로 의미하지 않습니다."
+    )
+    st.markdown("### 데이터 개요")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("기관 수", f"{panel['기관명'].nunique():,}개")
+    m2.metric("연도 범위", f"{panel['연도'].min()}–{panel['연도'].max()}")
+    m3.metric("기관-연도 관측치", f"{panel.shape[0]:,}건")
+
+    st.markdown("### 페이지 안내")
+    st.markdown(
+        """
+1. **기관유형 비교** — 4개 영역 전체를 기관유형별로 한눈에 비교
+2. **기관특성** — 임직원수·여성비율·근속연수 상세 탐색
+3. **재정구조** — 수입·지출·정부지원·법인세 구조 탐색
+4. **조직운영** — 보수·임원·복리후생·업무추진비 탐색
+5. **인사결과** — 채용·육아휴직·일가정양립 지표 탐색
+6. **변수관계 탐색** — 4개 영역을 자유롭게 연결하는 산점도·상관행렬
+7. **회귀분석** — 통제변수를 단계적으로 추가하는 다중회귀
+8. **패널데이터** — 기관별 시계열 변화와 고정효과 회귀
+        """
+    )
 
 st.divider()
-
-# ---------------------------------------------------------------------------
-# 수업에서 살펴볼 핵심 개념
-# ---------------------------------------------------------------------------
-st.markdown("###### 수업에서 살펴볼 핵심 개념")
-cc_cols = st.columns(3)
-for i, (title, desc) in enumerate(CORE_CONCEPTS):
-    with cc_cols[i % 3]:
-        with st.container(border=True):
-            st.markdown(f"**{title}**")
-            st.caption(desc)
-
-st.divider()
-
-# ---------------------------------------------------------------------------
-# 흥미로운 질문
-# ---------------------------------------------------------------------------
-st.markdown("###### 이런 질문들을 함께 탐색해볼 수 있습니다")
-st.info("\n\n".join(f"- {q}" for q in HOME_QUESTIONS))
-
-st.caption("왼쪽 메뉴에서 살펴보고 싶은 화면을 선택하세요.")
+st.caption(
+    "좌측 사이드바 **Pages** 메뉴에서 각 분석 페이지로 이동하세요. "
+    "모든 페이지의 필터(연도·기관유형·주무부처·기관명)는 서로 연동됩니다."
+)
