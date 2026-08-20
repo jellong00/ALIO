@@ -86,6 +86,37 @@ def plot_rank_bar(df: pd.DataFrame, name_col: str, value_col: str, top_n=20, tit
     return fig
 
 
+def plot_rank_bar_with_ratio(df: pd.DataFrame, name_col: str, value_col: str, reference_value,
+                              top_n=10, ascending=False, title="", unit=""):
+    """
+    Top/Bottom N 막대그래프에 '전체 평균 대비 몇 배'를 막대 위 텍스트 배지로 표시한다.
+    reference_value는 보통 전체 평균값을 넘긴다.
+    """
+    plot_df = df.copy()
+    plot_df[value_col] = pd.to_numeric(plot_df[value_col], errors="coerce")
+    plot_df = plot_df.dropna(subset=[value_col]).sort_values(value_col, ascending=ascending).head(top_n)
+    plot_df = plot_df.sort_values(value_col, ascending=True)
+
+    def _label(row):
+        v = row[value_col]
+        base = f"{v:,.0f}{unit}"
+        if reference_value and pd.notna(reference_value) and reference_value != 0:
+            ratio = v / reference_value
+            return f"{base}  (평균×{ratio:.1f})"
+        return base
+
+    plot_df["_label"] = plot_df.apply(_label, axis=1)
+
+    fig = px.bar(
+        plot_df, x=value_col, y=name_col, orientation="h", text="_label",
+        color_discrete_sequence=[PRIMARY_COLOR],
+    )
+    fig.update_traces(textposition="outside", cliponaxis=False)
+    _apply_base_layout(fig, title, xaxis_title=f"값{f' ({unit})' if unit else ''}", yaxis_title="")
+    fig.update_layout(height=max(370, 26 * len(plot_df)), margin=dict(l=40, r=90, t=45, b=35))
+    return fig
+
+
 def plot_time_series(df: pd.DataFrame, year_col: str, value_col: str, title="", unit="", color_col=None):
     plot_df = df.copy()
     plot_df[value_col] = pd.to_numeric(plot_df[value_col], errors="coerce")
