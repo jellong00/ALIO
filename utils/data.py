@@ -29,11 +29,13 @@ FILES = {
     "tax": ("법인세정보.xlsx", "법인세", ["항목"]),
     "employees": ("임직원수현황.xlsx", "1. 임직원 수", ["항목"]),
     "compensation": ("직원평균보수현황.xlsx", "1. 직원평균보수", ["구분", "항목"]),
+    "starting_pay": ("직원평균보수현황.xlsx", "2. 신입사원초임", ["항목"]),
     "executive_pay": ("임원연봉.xlsx", "임원연봉", ["구분", "항목"]),
     "recruitment": ("신규채용현황.xlsx", "1. 신규채용현황", ["항목"]),
     "welfare": ("복리후생비.xlsx", "1. 예산상 복리후생비", ["구분", "항목"]),
     "business_expense": ("기관장업무추진비.xlsx", "기관장업무추진비", ["항목"]),
     "other_welfare": ("그밖의_복리후생제도_등의_운영현황.xlsx", "1-2. 휴직급여지급현황", ["구분", "항목"]),
+    "parental_leave": ("일가정_양립_지원제도_운영현황.xlsx", "1. 일가정-육아휴직사용자수", ["구분"]),
 }
 
 
@@ -111,7 +113,7 @@ def _load_long(key: str) -> pd.DataFrame:
     return long_df
 
 
-def _pivot_items(long_df, item_map, extra_filter=None,
+def _pivot_items(long_df, item_map, extra_filter=None, item_col="항목",
                   id_cols=("기관명", "기관유형", "주무부처", "연도")):
     """long_df에서 특정 항목만 뽑아 wide(item_map 값이 컬럼명)로 변환한다."""
     df = long_df.copy()
@@ -119,10 +121,10 @@ def _pivot_items(long_df, item_map, extra_filter=None,
         for k, v in extra_filter.items():
             if k in df.columns:
                 df = df[df[k] == v]
-    df = df[df["항목"].isin(item_map.keys())].copy()
-    df["항목"] = df["항목"].map(item_map)
+    df = df[df[item_col].isin(item_map.keys())].copy()
+    df[item_col] = df[item_col].map(item_map)
     id_cols = [c for c in id_cols if c in df.columns]
-    wide = df.pivot_table(index=id_cols, columns="항목", values="값", aggfunc="first").reset_index()
+    wide = df.pivot_table(index=id_cols, columns=item_col, values="값", aggfunc="first").reset_index()
     wide.columns.name = None
     return wide
 
@@ -135,102 +137,189 @@ def _safe_ratio(numerator, denominator):
     return ratio.replace([np.inf, -np.inf], np.nan)
 
 
-@st.cache_data(show_spinner="기관-연도 패널 데이터를 구성하는 중...")
-def _build_panel() -> pd.DataFrame:
-    """여러 데이터셋의 대표 항목을 뽑아 기관-연도 단위 패널로 병합한다."""
+@st.cache_data(show_spinner="기관-연도 통합 분석 패널을 구성하는 중...")
+def build_analysis_panel() -> pd.DataFrame:
+    """
+    여러 데이터셋의 핵심 변수를 기관명+연도 기준으로 통합한 분석용 데이터프레임.
+    값이 없는 경우 절대 0으로 대체하지 않고 NaN을 유지한다 (outer merge).
+    """
     finance = _load_long("finance")
     tax = _load_long("tax")
     employees = _load_long("employees")
     compensation = _load_long("compensation")
+    starting_pay = _load_long("starting_pay")
     exec_pay = _load_long("executive_pay")
     recruitment = _load_long("recruitment")
     welfare = _load_long("welfare")
     biz_expense = _load_long("business_expense")
+    parental = _load_long("parental_leave")
 
     if finance.empty:
         return pd.DataFrame()
 
+    # --- 재무 ---
     panel = _pivot_items(finance, {
-        "수입 > 수입합계": "총수입",
-        "수입 > 정부지원수입 > 소계": "정부지원수입",
-        "지출 > 지출합계": "총지출",
-        "지출 > 인건비": "인건비",
-        "지출 > 경상운영비": "경상운영비",
-        "지출 > 사업비": "사업비",
+        "수입 > 수입합계": "total_revenue",
+        "수입 > 정부지원수입 > 소계": "gov_support_revenue",
+        "수입 > 기타사업수입": "business_revenue",
+        "지출 > 지출합계": "total_expense",
+        "지출 > 인건비": "labor_cost",
+        "지출 > 경상운영비": "operating_cost",
+        "지출 > 사업비": "business_cost",
     })
 
-    tax_wide = _pivot_items(tax, {
-        "과세표준": "과세표준", "법인세 산출세액": "법인세산출세액",
-        "세액공제": "세액공제", "가산세": "가산세", "결정세액": "법인세결정세액",
-    })
+    # --- 법인세 ---
+    tax_wide = _pivot_items(tax, {"결정세액": "tax_determined"})
 
+    # --- 임직원 (정원/현원, 여성) ---
     employees_wide = _pivot_items(employees, {
-        "임직원 총계(A+B+C)": "임직원수",
-        "정규직-일반정규직-현원-계": "정규직수",
-        "여성 현원-합계": "여성직원수",
+        "임직원 총계(A+B+C)": "total_workforce",
+        "여성 현원-합계": "female_workforce",
     })
+    authorized_items = ["정규직-일반정규직-정원-계(B)", "정규직-무기계약직-정원-계(C)"]
+    current_items = ["정규직-일반정규직-현원-계", "정규직-무기계약직-현원-계"]
+    auth_df = employees[employees["항목"].isin(authorized_items)]
+    auth_wide = auth_df.pivot_table(index=["기관명", "기관유형", "주무부처", "연도"], columns="항목", values="값", aggfunc="first").reset_index()
+    auth_wide.columns.name = None
+    auth_present = [c for c in authorized_items if c in auth_wide.columns]
+    auth_wide["total_authorized"] = auth_wide[auth_present].sum(axis=1, skipna=True) if auth_present else np.nan
+    auth_wide = auth_wide[["기관명", "기관유형", "주무부처", "연도", "total_authorized"]]
+
+    cur_df = employees[employees["항목"].isin(current_items)]
+    cur_wide = cur_df.pivot_table(index=["기관명", "기관유형", "주무부처", "연도"], columns="항목", values="값", aggfunc="first").reset_index()
+    cur_wide.columns.name = None
+    cur_present = [c for c in current_items if c in cur_wide.columns]
+    cur_wide["_current_regular"] = cur_wide[cur_present].sum(axis=1, skipna=True) if cur_present else np.nan
+    cur_wide = cur_wide[["기관명", "기관유형", "주무부처", "연도", "_current_regular"]]
 
     nonreg_items = ["비정규직-기간제-계", "비정규직-기타", "비정규직-소속외 인력-계"]
     nonreg = employees[employees["항목"].isin(nonreg_items)]
-    nonreg_wide = nonreg.pivot_table(
-        index=["기관명", "기관유형", "주무부처", "연도"], columns="항목", values="값", aggfunc="first"
-    ).reset_index()
+    nonreg_wide = nonreg.pivot_table(index=["기관명", "기관유형", "주무부처", "연도"], columns="항목", values="값", aggfunc="first").reset_index()
     nonreg_wide.columns.name = None
-    present = [c for c in nonreg_items if c in nonreg_wide.columns]
-    nonreg_wide["비정규직수"] = nonreg_wide[present].sum(axis=1, skipna=True) if present else np.nan
-    nonreg_wide = nonreg_wide[["기관명", "기관유형", "주무부처", "연도", "비정규직수"]]
+    nonreg_present = [c for c in nonreg_items if c in nonreg_wide.columns]
+    nonreg_wide["nonregular_workforce"] = nonreg_wide[nonreg_present].sum(axis=1, skipna=True) if nonreg_present else np.nan
+    nonreg_wide = nonreg_wide[["기관명", "기관유형", "주무부처", "연도", "nonregular_workforce"]]
 
+    # --- 신규채용 ---
     recruitment_wide = _pivot_items(recruitment, {
-        "일반정규직총신규채용": "신규채용", "여성": "여성신규채용",
-        "청년": "청년신규채용", "장애인": "장애인신규채용",
+        "일반정규직총신규채용": "total_new_hires",
+        "여성": "female_hires",
+        "청년": "youth_hires",
+        "장애인": "disabled_hires",
     })
 
+    # --- 직원보수 (정규직(일반정규직) 기준) ---
     compensation_wide = _pivot_items(
         compensation,
-        {
-            "1인당 평균보수액": "직원평균보수", "1인당 평균보수액 - 남성": "남성평균보수",
-            "1인당 평균보수액 - 여성": "여성평균보수", "평균근속연수(개월)": "평균근속연수_개월",
-        },
+        {"1인당 평균보수액": "employee_avg_pay", "평균근속연수(개월)": "avg_tenure_months"},
         extra_filter={"구분": "정규직(일반정규직)"},
     )
+    starting_pay_wide = _pivot_items(starting_pay, {"합계": "starting_pay"})
 
-    exec_pay_head = _pivot_items(exec_pay, {"합계": "기관장보수"}, extra_filter={"구분": "상임기관장"})
-    exec_pay_avg = _pivot_items(exec_pay, {"상임임원평균연봉": "임원평균보수"}, extra_filter={"구분": "상임임원 평균보수(연봉)"})
+    # --- 임원보수 ---
+    exec_pay_wide = _pivot_items(exec_pay, {"합계": "executive_total_pay"}, extra_filter={"구분": "상임기관장"})
 
-    biz_expense_wide = _pivot_items(biz_expense, {"업무추진비 집행금액": "기관장업무추진비"})
+    # --- 업무추진비 ---
+    biz_expense_wide = _pivot_items(biz_expense, {"업무추진비 집행금액": "executive_expense"})
 
+    # --- 복리후생 ---
     welfare_total = welfare[welfare["항목"].astype(str).str.contains("총계", na=False)]
     welfare_item_name = welfare_total["항목"].iloc[0] if not welfare_total.empty else None
-    welfare_wide = (
-        _pivot_items(welfare, {welfare_item_name: "총복리후생비"}) if welfare_item_name else pd.DataFrame()
+    welfare_wide = _pivot_items(welfare, {welfare_item_name: "total_welfare_expense"}) if welfare_item_name else pd.DataFrame()
+
+    # --- 육아휴직 (일가정 양립) ---
+    parental_wide = _pivot_items(
+        parental,
+        {
+            "전체 사용자 수": "parental_leave_total",
+            "남성 사용자 수": "parental_leave_male",
+            "여성 사용자 수": "parental_leave_female",
+            "남성 육아휴직 사용률": "male_parental_leave_ratio_pct",
+        },
+        item_col="구분",
     )
 
-    for wide_df in [tax_wide, employees_wide, nonreg_wide, recruitment_wide,
-                    compensation_wide, exec_pay_head, exec_pay_avg, biz_expense_wide, welfare_wide]:
-        if wide_df.empty:
+    for wide_df in [tax_wide, employees_wide, auth_wide, cur_wide, nonreg_wide,
+                    recruitment_wide, compensation_wide, starting_pay_wide,
+                    exec_pay_wide, biz_expense_wide, welfare_wide, parental_wide]:
+        if wide_df is None or wide_df.empty:
             continue
         merge_cols = [c for c in ["기관명", "기관유형", "주무부처", "연도"] if c in wide_df.columns]
         panel = panel.merge(wide_df, on=merge_cols, how="outer")
 
-    # 파생변수 (분모 0/결측은 NaN 처리)
-    if {"총수입", "총지출"}.issubset(panel.columns):
-        panel["수지차"] = panel["총수입"] - panel["총지출"]
-    if {"정부지원수입", "총수입"}.issubset(panel.columns):
-        panel["정부지원수입비중"] = _safe_ratio(panel["정부지원수입"], panel["총수입"])
-    if {"인건비", "총지출"}.issubset(panel.columns):
-        panel["인건비비중"] = _safe_ratio(panel["인건비"], panel["총지출"])
-    if {"사업비", "총지출"}.issubset(panel.columns):
-        panel["사업비비중"] = _safe_ratio(panel["사업비"], panel["총지출"])
-    if {"총수입", "임직원수"}.issubset(panel.columns):
-        panel["1인당수입"] = _safe_ratio(panel["총수입"], panel["임직원수"])
-    if {"총지출", "임직원수"}.issubset(panel.columns):
-        panel["1인당지출"] = _safe_ratio(panel["총지출"], panel["임직원수"])
-    if {"여성직원수", "임직원수"}.issubset(panel.columns):
-        panel["여성직원비율"] = _safe_ratio(panel["여성직원수"], panel["임직원수"])
-    if {"비정규직수", "임직원수"}.issubset(panel.columns):
-        panel["비정규직비율"] = _safe_ratio(panel["비정규직수"], panel["임직원수"])
+    # --- 파생변수 (분자/분모 결측 또는 0이면 NaN) ---
+    if {"_current_regular", "total_authorized"}.issubset(panel.columns):
+        panel["fill_rate_pct"] = _safe_ratio(panel["_current_regular"], panel["total_authorized"]) * 100
+        panel.drop(columns=["_current_regular"], inplace=True)
+
+    if {"female_workforce", "total_workforce"}.issubset(panel.columns):
+        panel["female_ratio_pct"] = _safe_ratio(panel["female_workforce"], panel["total_workforce"]) * 100
+
+    if {"total_new_hires", "total_workforce"}.issubset(panel.columns):
+        panel["new_hire_rate_pct"] = _safe_ratio(panel["total_new_hires"], panel["total_workforce"]) * 100
+    if {"youth_hires", "total_new_hires"}.issubset(panel.columns):
+        panel["youth_hire_ratio_pct"] = _safe_ratio(panel["youth_hires"], panel["total_new_hires"]) * 100
+    if {"female_hires", "total_new_hires"}.issubset(panel.columns):
+        panel["female_hire_ratio_pct"] = _safe_ratio(panel["female_hires"], panel["total_new_hires"]) * 100
+    if {"disabled_hires", "total_new_hires"}.issubset(panel.columns):
+        panel["disabled_hire_ratio_pct"] = _safe_ratio(panel["disabled_hires"], panel["total_new_hires"]) * 100
+
+    if {"executive_total_pay", "employee_avg_pay"}.issubset(panel.columns):
+        panel["executive_pay_multiple"] = _safe_ratio(panel["executive_total_pay"], panel["employee_avg_pay"])
+    if {"executive_expense", "total_workforce"}.issubset(panel.columns):
+        panel["executive_expense_per_capita"] = _safe_ratio(panel["executive_expense"], panel["total_workforce"])
+
+    if {"total_welfare_expense", "total_workforce"}.issubset(panel.columns):
+        panel["welfare_per_capita"] = _safe_ratio(panel["total_welfare_expense"], panel["total_workforce"])
+
+    if {"parental_leave_total", "female_workforce"}.issubset(panel.columns):
+        panel["parental_leave_rate_pct"] = _safe_ratio(panel["parental_leave_total"], panel["female_workforce"]) * 100
+
+    if {"total_revenue", "total_expense"}.issubset(panel.columns):
+        panel["balance"] = panel["total_revenue"] - panel["total_expense"]
+    if {"gov_support_revenue", "total_revenue"}.issubset(panel.columns):
+        panel["gov_dependency_pct"] = _safe_ratio(panel["gov_support_revenue"], panel["total_revenue"]) * 100
+    if {"business_revenue"}.issubset(panel.columns):
+        panel["own_revenue_conservative"] = panel["business_revenue"]
+    if {"total_revenue", "gov_support_revenue"}.issubset(panel.columns):
+        panel["own_revenue_broad"] = panel["total_revenue"] - panel["gov_support_revenue"]
+    if {"total_revenue", "total_workforce"}.issubset(panel.columns):
+        panel["revenue_per_employee"] = _safe_ratio(panel["total_revenue"], panel["total_workforce"])
+    if {"business_revenue", "total_workforce"}.issubset(panel.columns):
+        panel["business_revenue_per_employee"] = _safe_ratio(panel["business_revenue"], panel["total_workforce"])
+    if {"labor_cost", "total_expense"}.issubset(panel.columns):
+        panel["labor_cost_ratio_pct"] = _safe_ratio(panel["labor_cost"], panel["total_expense"]) * 100
 
     return panel
+
+
+def load_dataset(key: str) -> pd.DataFrame:
+    """
+    데이터셋을 불러온다.
+    key가 'panel'이면 기관-연도 통합 분석 패널을, 그 외에는 해당 데이터셋의
+    long(연도) 포맷을 반환한다. 원본 파일이 없거나 읽기에 실패하면
+    구체적인 진단 정보와 함께 안내 메시지를 표시한다.
+    """
+    if key == "panel":
+        df = build_analysis_panel()
+    elif key in FILES:
+        df = _load_long(key)
+    else:
+        raise ValueError(f"알 수 없는 데이터셋: {key}")
+
+    if df.empty:
+        if key == "panel":
+            check_keys = ["finance", "tax", "employees", "compensation",
+                          "executive_pay", "recruitment", "welfare", "business_expense"]
+            target_key = next((k for k in check_keys if _load_long(k).empty), "finance")
+        else:
+            target_key = key
+
+        info = _diagnose(target_key)
+        st.error(f"'{target_key}' 데이터셋을 불러오지 못했습니다. 아래 진단 정보를 확인해주세요.")
+        st.json(info)
+
+    return df
 
 
 def _diagnose(key: str) -> dict:
@@ -265,37 +354,6 @@ def _diagnose(key: str) -> dict:
         info["시트 읽기 오류"] = str(e)
 
     return info
-
-
-def load_dataset(key: str) -> pd.DataFrame:
-    """
-    데이터셋을 불러온다.
-    key가 'panel'이면 기관-연도 병합 패널을, 그 외에는 해당 데이터셋의
-    long(연도) 포맷을 반환한다. 원본 파일이 없거나 읽기에 실패하면
-    구체적인 진단 정보와 함께 안내 메시지를 표시한다.
-    """
-    if key == "panel":
-        df = _build_panel()
-    elif key in FILES:
-        df = _load_long(key)
-    else:
-        raise ValueError(f"알 수 없는 데이터셋: {key}")
-
-    if df.empty:
-        # panel은 여러 데이터셋을 조합하므로, 비어있는 원인이 되는
-        # 첫 번째 데이터셋을 찾아 진단한다.
-        if key == "panel":
-            check_keys = ["finance", "tax", "employees", "compensation",
-                          "executive_pay", "recruitment", "welfare", "business_expense"]
-            target_key = next((k for k in check_keys if _load_long(k).empty), "finance")
-        else:
-            target_key = key
-
-        info = _diagnose(target_key)
-        st.error(f"'{target_key}' 데이터셋을 불러오지 못했습니다. 아래 진단 정보를 확인해주세요.")
-        st.json(info)
-
-    return df
 
 
 def raw_files_exist() -> bool:
