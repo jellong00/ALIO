@@ -56,9 +56,9 @@ def safe_gov_compare():
     return None, None
 
 
-def safe_paternity_leave_by_type():
-    if "남성육아휴직사용률" in panel.columns:
-        s = panel.groupby("기관유형")["남성육아휴직사용률"].mean().dropna()
+def safe_female_leave_by_type():
+    if "여성육아휴직사용자수" in panel.columns:
+        s = panel.groupby("기관유형")["여성육아휴직사용자수"].mean().dropna()
         if not s.empty:
             return s.idxmax(), s.max()
     return None, None
@@ -80,7 +80,7 @@ def safe_salary_growth_top():
 
 q_org, q_ratio = safe_ratio_top()
 q_amt_org, q_ratio_org = safe_gov_compare()
-q_type, q_type_rate = safe_paternity_leave_by_type()
+q_type, q_type_rate = safe_female_leave_by_type()
 q_growth_org, q_growth_rate = safe_salary_growth_top()
 
 qc1, qc2 = st.columns(2)
@@ -101,9 +101,9 @@ with qc2:
         st.info("🏛️ 정부지원수입이 많은 기관과 정부지원의존도가 높은 기관은 같을까요?")
 with qc3:
     if q_type:
-        st.info(f"👶 **남성 육아휴직 사용률이 가장 높은 기관유형은?** — **{q_type}** (평균 {q_type_rate:.1f}%)")
+        st.info(f"👶 **여성 육아휴직 사용자 수가 가장 많은 기관유형은?** — **{q_type}** (평균 {q_type_rate:.1f}명)")
     else:
-        st.info("👶 남성 육아휴직 사용률이 높은 기관유형은 어디일까요?")
+        st.info("👶 육아휴직 사용자 수가 많은 기관유형은 어디일까요?")
 with qc4:
     if q_growth_org:
         st.info(f"📈 **{earliest_year}~{latest_year}년, 평균보수가 가장 많이 오른 기관은?** — "
@@ -147,15 +147,16 @@ st.divider()
 st.markdown("### 페이지 안내")
 st.markdown(
     """
-1. **기술통계 및 변수분포** — 변수 하나를 골라 N·평균·분포·순위를 확인
-2. **기관유형별 비교** — 기관유형 간 평균·분포 차이와 ANOVA
-3. **재정구조 및 법인세** — 수입·지출 구조와 법인세 흐름
-4. **보수·복리후생·채용** — 탭으로 보수/임원/복리후생/채용 지표 탐색
-5. **변수간 관계분석** — 변수 A·B를 자유롭게 골라 관계 탐색 (핵심 페이지)
-6. **기관별 비교 및 프로필** — 내 기관을 찾아 동일유형·동일부처·전체와 비교
-7. **연도별 변화분석** — 수준과 증가율, 순위 안정성 확인
-8. **다중회귀분석** (심화) — 통제변수를 추가하며 관계의 강건성 확인
-9. **패널데이터 분석** (심화) — 기관 간 차이 vs 기관 내부 변화, 고정효과
+1. **기술통계 및 변수분포** — 변수 하나를 골라 전체·유형·부처·기관 위치를 확인
+2. **기관유형 및 주무부처 비교** — 두 기준으로 비교 + 부처×유형 교차분석
+3. **재정구조 및 법인세** — 수입·지출 구조와 법인세 흐름 (유형/부처/개별기관)
+4. **보수·복리후생·채용** — 탭으로 지표 탐색 + 선택기관 4중 비교
+5. **변수간 관계분석** — 자유 변수 선택 + 관계 비교기준(전체/유형/부처) (핵심 페이지)
+6. **기관별 비교 및 프로필** — 내 기관을 4단계로 비교, 상대 프로파일, 유사기관
+7. **연도별 변화분석** — 전체·유형·부처·기관 4단계 추세 비교, 증가율, 순위 안정성
+8. **다중회귀분석** (심화) — 기관유형·주무부처·연도를 단계적으로 통제
+9. **패널데이터 분석** (심화) — Between/Within, 기관·부처 고정효과
+10. **주무부처별 분석** — 부처 하나를 골라 산하기관 전체를 살펴보는 페이지
     """
 )
 
