@@ -1,5 +1,8 @@
 import streamlit as st
+import pandas as pd
+
 from utils.data_cleaner import get_full_panel
+from utils.variables import VARIABLES
 
 st.set_page_config(
     page_title="공공기관 계량분석 대시보드",
@@ -9,83 +12,155 @@ st.set_page_config(
 )
 
 st.title("📊 공공기관 계량분석 대시보드")
-st.markdown(
-    "##### 기관 특성 · 재정 구조 · 조직 운영 · 인사 결과를 연결한 공공기관 데이터 분석"
-)
+st.markdown("##### 실제 공공기관 데이터로 질문을 만들고, 분포를 확인하고, 관계를 탐색하는 기초계량분석 실습 대시보드")
 st.divider()
 
 with st.spinner("데이터를 불러오는 중입니다..."):
     panel = get_full_panel()
 
-col1, col2 = st.columns([1.1, 1])
+used_cols = {v["column"] for v in VARIABLES.values() if v["column"] in panel.columns}
 
-with col1:
-    st.markdown("### 분석 프레임")
-    st.markdown(
-        """
-<div style="line-height:2.1; font-size:1.05rem;">
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("분석기관 수", f"{panel['기관명'].nunique():,}개")
+m2.metric("연도 범위", f"{panel['연도'].min()}–{panel['연도'].max()}")
+m3.metric("기관-연도 관측치", f"{panel.shape[0]:,}건")
+m4.metric("결합된 변수 수", f"{len(used_cols):,}개")
 
-<div style="background:#EEF3FB; border:2px solid #4C78A8; border-radius:10px; padding:14px 18px; margin-bottom:6px;">
-<b>① 기관 특성</b><br>
-<span style="color:#555;">기관유형 · 주무부처 · 기관규모 · 인력구조</span>
-</div>
+st.divider()
 
-<div style="text-align:center; font-size:1.4rem; color:#4C78A8;">↓</div>
+# ---------------- 실데이터 기반 흥미유도 질문 ----------------
+st.markdown("### 🤔 이 데이터로 답할 수 있는 질문들")
 
-<div style="background:#FBF3EE; border:2px solid #E07B39; border-radius:10px; padding:14px 18px; margin-bottom:6px;">
-<b>② 재정 구조</b><br>
-<span style="color:#555;">총수입 · 총지출 · 정부지원의존도 · 법인세</span>
-</div>
+latest_year = panel["연도"].max()
+earliest_year = panel["연도"].min()
+snap = panel[panel["연도"] == latest_year]
 
-<div style="text-align:center; font-size:1.4rem; color:#E07B39;">↓</div>
 
-<div style="background:#EEFBF1; border:2px solid #2CA02C; border-radius:10px; padding:14px 18px; margin-bottom:6px;">
-<b>③ 조직 운영</b><br>
-<span style="color:#555;">직원·임원 보수 · 복리후생 · 기관장업무추진비</span>
-</div>
+def safe_ratio_top():
+    if "기관장직원보수배율" in snap.columns:
+        s = snap[["기관명", "기관장직원보수배율"]].dropna()
+        if not s.empty:
+            row = s.loc[s["기관장직원보수배율"].idxmax()]
+            return row["기관명"], row["기관장직원보수배율"]
+    return None, None
 
-<div style="text-align:center; font-size:1.4rem; color:#2CA02C;">↓</div>
 
-<div style="background:#F5EEFB; border:2px solid #9467BD; border-radius:10px; padding:14px 18px;">
-<b>④ 인사 결과</b><br>
-<span style="color:#555;">신규채용 · 여성채용 · 육아휴직 · 일가정 양립</span>
-</div>
+def safe_gov_compare():
+    if "정부지원수입" in snap.columns and "정부지원의존도" in snap.columns:
+        s1 = snap[["기관명", "정부지원수입"]].dropna()
+        s2 = snap[["기관명", "정부지원의존도"]].dropna()
+        if not s1.empty and not s2.empty:
+            top_amt = s1.loc[s1["정부지원수입"].idxmax(), "기관명"]
+            top_ratio = s2.loc[s2["정부지원의존도"].idxmax(), "기관명"]
+            return top_amt, top_ratio
+    return None, None
 
-</div>
-""",
-        unsafe_allow_html=True,
-    )
 
-with col2:
-    st.info(
-        "⚠️ **이 흐름은 인과관계를 전제하지 않습니다.**\n\n"
-        "데이터에서 관찰되는 차이와 관계를 탐색하고, 계량모형을 이용하여 "
-        "어떤 관계가 다른 조건을 통제한 후에도 유지되는지 검토하기 위한 "
-        "**분석 가설 프레임**입니다.\n\n"
-        "회귀분석 결과의 통계적 유의성은 인과효과를 자동으로 의미하지 않습니다."
-    )
-    st.markdown("### 데이터 개요")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("기관 수", f"{panel['기관명'].nunique():,}개")
-    m2.metric("연도 범위", f"{panel['연도'].min()}–{panel['연도'].max()}")
-    m3.metric("기관-연도 관측치", f"{panel.shape[0]:,}건")
+def safe_paternity_leave_by_type():
+    if "남성육아휴직사용률" in panel.columns:
+        s = panel.groupby("기관유형")["남성육아휴직사용률"].mean().dropna()
+        if not s.empty:
+            return s.idxmax(), s.max()
+    return None, None
 
-    st.markdown("### 페이지 안내")
-    st.markdown(
-        """
-1. **기관유형 비교** — 4개 영역 전체를 기관유형별로 한눈에 비교
-2. **기관특성** — 임직원수·여성비율·근속연수 상세 탐색
-3. **재정구조** — 수입·지출·정부지원·법인세 구조 탐색
-4. **조직운영** — 보수·임원·복리후생·업무추진비 탐색
-5. **인사결과** — 채용·육아휴직·일가정양립 지표 탐색
-6. **변수관계 탐색** — 4개 영역을 자유롭게 연결하는 산점도·상관행렬
-7. **회귀분석** — 통제변수를 단계적으로 추가하는 다중회귀
-8. **패널데이터** — 기관별 시계열 변화와 고정효과 회귀
-        """
-    )
+
+def safe_salary_growth_top():
+    col = "직원평균보수"
+    if col in panel.columns:
+        first = panel[panel["연도"] == earliest_year][["기관명", col]].dropna().rename(columns={col: "초기값"})
+        last = panel[panel["연도"] == latest_year][["기관명", col]].dropna().rename(columns={col: "최근값"})
+        merged = pd.merge(first, last, on="기관명")
+        merged = merged[merged["초기값"] > 0]
+        if not merged.empty:
+            merged["증가율"] = (merged["최근값"] - merged["초기값"]) / merged["초기값"] * 100
+            row = merged.loc[merged["증가율"].idxmax()]
+            return row["기관명"], row["증가율"]
+    return None, None
+
+
+q_org, q_ratio = safe_ratio_top()
+q_amt_org, q_ratio_org = safe_gov_compare()
+q_type, q_type_rate = safe_paternity_leave_by_type()
+q_growth_org, q_growth_rate = safe_salary_growth_top()
+
+qc1, qc2 = st.columns(2)
+qc3, qc4 = st.columns(2)
+
+with qc1:
+    if q_org:
+        st.info(f"💰 **기관장 연봉이 직원 평균보수의 몇 배?** — {latest_year}년 기준 **{q_org}**이(가) "
+                f"**{q_ratio:.1f}배**로 가장 높습니다.")
+    else:
+        st.info("💰 기관장 연봉은 직원 평균보수의 몇 배일까요? — [보수·복리후생·채용] 페이지에서 확인해보세요.")
+with qc2:
+    if q_amt_org and q_ratio_org:
+        same = "같습니다" if q_amt_org == q_ratio_org else "다릅니다"
+        st.info(f"🏛️ **정부지원수입 최다 기관과 정부지원의존도 최고 기관은 같을까?** — {same}. "
+                f"(수입 최다: {q_amt_org} / 의존도 최고: {q_ratio_org})")
+    else:
+        st.info("🏛️ 정부지원수입이 많은 기관과 정부지원의존도가 높은 기관은 같을까요?")
+with qc3:
+    if q_type:
+        st.info(f"👶 **남성 육아휴직 사용률이 가장 높은 기관유형은?** — **{q_type}** (평균 {q_type_rate:.1f}%)")
+    else:
+        st.info("👶 남성 육아휴직 사용률이 높은 기관유형은 어디일까요?")
+with qc4:
+    if q_growth_org:
+        st.info(f"📈 **{earliest_year}~{latest_year}년, 평균보수가 가장 많이 오른 기관은?** — "
+                f"**{q_growth_org}** (+{q_growth_rate:.1f}%)")
+    else:
+        st.info("📈 최근 기간 평균보수가 가장 많이 상승한 기관은 어디일까요?")
+
+st.caption("💡 더 자세한 답은 좌측 사이드바의 각 분석 페이지에서 직접 탐색해보세요.")
+
+st.divider()
+
+# ---------------- 계량분석 핵심개념 ----------------
+st.markdown("### 📚 이 대시보드를 보기 전에: 계량분석 핵심개념")
+c1, c2, c3, c4 = st.columns(4)
+c5, c6, c7 = st.columns(3)
+
+with c1:
+    st.markdown("#### ① 평균과 중앙값")
+    st.caption("평균만으로 전체 분포를 설명할 수 있을까요? 극단값이 있으면 평균과 중앙값이 크게 달라집니다.")
+with c2:
+    st.markdown("#### ② 분포와 이상치")
+    st.caption("극단값(이상치)은 평균뿐 아니라 회귀분석 결과에도 큰 영향을 줄 수 있습니다.")
+with c3:
+    st.markdown("#### ③ 총액과 비율")
+    st.caption("기관 규모가 다른데 총액을 그대로 비교해도 될까요? '1인당' 지표가 필요한 이유입니다.")
+with c4:
+    st.markdown("#### ④ 집단 차이")
+    st.caption("기관유형별 평균 차이가 통계적으로 유의하다고 해서 그것이 곧 원인은 아닙니다.")
+with c5:
+    st.markdown("#### ⑤ 상관관계")
+    st.caption("두 변수가 함께 움직인다고 해서 인과관계라고 할 수 있을까요?")
+with c6:
+    st.markdown("#### ⑥ 통제변수")
+    st.caption("다른 조건(기관유형, 규모 등)을 고려하면 관계가 어떻게 달라질까요?")
+with c7:
+    st.markdown("#### ⑦ 시간 변화")
+    st.caption("기관 간의 차이와 동일 기관의 시간에 따른 변화는 같은 정보를 담고 있을까요?")
+
+st.divider()
+
+st.markdown("### 페이지 안내")
+st.markdown(
+    """
+1. **기술통계 및 변수분포** — 변수 하나를 골라 N·평균·분포·순위를 확인
+2. **기관유형별 비교** — 기관유형 간 평균·분포 차이와 ANOVA
+3. **재정구조 및 법인세** — 수입·지출 구조와 법인세 흐름
+4. **보수·복리후생·채용** — 탭으로 보수/임원/복리후생/채용 지표 탐색
+5. **변수간 관계분석** — 변수 A·B를 자유롭게 골라 관계 탐색 (핵심 페이지)
+6. **기관별 비교 및 프로필** — 내 기관을 찾아 동일유형·동일부처·전체와 비교
+7. **연도별 변화분석** — 수준과 증가율, 순위 안정성 확인
+8. **다중회귀분석** (심화) — 통제변수를 추가하며 관계의 강건성 확인
+9. **패널데이터 분석** (심화) — 기관 간 차이 vs 기관 내부 변화, 고정효과
+    """
+)
 
 st.divider()
 st.caption(
     "좌측 사이드바 **Pages** 메뉴에서 각 분석 페이지로 이동하세요. "
-    "모든 페이지의 필터(연도·기관유형·주무부처·기관명)는 서로 연동됩니다."
+    "모든 페이지의 필터(연도·기관유형·주무부처·기관명)는 종속적으로 연동됩니다."
 )
