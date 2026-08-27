@@ -92,7 +92,7 @@ else:
 st.divider()
 
 # ---------------- D. 표본 수와 부처 평균의 안정성 ----------------
-st.markdown("### D. 표본 수와 부처 평균의 안정성")
+st.markdown("### D. 소수 기관으로 계산된 부처 평균은 얼마나 안정적인가?")
 st.caption("산하기관이 2개뿐인 부처의 평균과 30개인 부처의 평균을 같은 확신으로 비교해도 될까요?")
 fig_scatter = px.scatter(dept_stats, x="기관수", y="평균", hover_name="주무부처",
                            labels={"기관수": "산하기관 수", "평균": f"{get_label(var_key)} 평균"})
