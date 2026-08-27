@@ -6,7 +6,8 @@ from scipy import stats
 from utils.data_cleaner import get_full_panel
 from utils.filters import sidebar_filters
 from utils.variables import VARIABLES, get_label, get_unit
-from utils.charts import plot_scatter, plot_rank_bar
+from utils.charts import plot_scatter, plot_rank_bar, plot_group_vs_overall
+from utils.level_compare import dept_stats_table
 from utils.page_header import render_intro, year_slice
 
 st.set_page_config(page_title="보수 및 복리후생", layout="wide")
@@ -69,6 +70,35 @@ with tab1:
             r, p = stats.pearsonr(sub2["평균근속연수"], sub2["직원평균보수"])
             st.caption(f"Pearson r = {r:.3f} (N = {sub2.shape[0]:,})")
 
+    st.divider()
+    st.markdown("#### 기관유형별 보수 프리미엄")
+    st.caption("💡 어떤 기관유형이 전체 평균보다 보수 수준이 높거나 낮은지 확인합니다.")
+    if "직원평균보수" in view.columns:
+        st.plotly_chart(plot_group_vs_overall(view, VARIABLES["직원평균보수"]["column"], var_key="직원평균보수"),
+                         use_container_width=True, key="p6_pay_premium")
+
+    st.markdown("#### 주무부처별 보수 차이")
+    st.caption("💡 소수 기관으로 계산된 부처 평균은 신중하게 해석하세요 (N을 함께 확인).")
+    if "직원평균보수" in view.columns:
+        dstats = dept_stats_table(view, VARIABLES["직원평균보수"]["column"], min_n=2)
+        if not dstats.empty:
+            dstats_top = dstats.sort_values("평균", ascending=True).tail(20)
+            fig_dept_pay = px.bar(dstats_top, x="평균", y="주무부처", orientation="h",
+                                    labels={"평균": "직원평균보수 (천원)"}, hover_data=["N"])
+            fig_dept_pay.update_layout(font=dict(size=13), height=max(420, 24 * len(dstats_top)),
+                                         title="주무부처별 직원평균보수 (상위 20개 부처, N 순 아님)")
+            st.plotly_chart(fig_dept_pay, use_container_width=True)
+        else:
+            st.info("부처별 비교를 계산할 데이터가 부족합니다.")
+
+    st.markdown("#### 동일유형 내 고보수 기관")
+    if "직원평균보수" in view.columns:
+        sel_type_pay = st.selectbox("기관유형 선택", sorted(view["기관유형"].dropna().unique()), key="p6_paytype")
+        within_type = view[view["기관유형"] == sel_type_pay][["기관명", VARIABLES["직원평균보수"]["column"]]].dropna()
+        top5_type = within_type.sort_values(VARIABLES["직원평균보수"]["column"], ascending=False).head(5)
+        st.dataframe(top5_type.rename(columns={VARIABLES["직원평균보수"]["column"]: "직원평균보수(천원)"}),
+                     use_container_width=True, hide_index=True)
+
 # ================= TAB 2: 임원 보수 =================
 with tab2:
     st.caption("기관장연봉·임원평균연봉·보수배율의 분포는 → **① 변수분포 및 기술통계** 페이지 [임원] 탭에서 확인할 수 있습니다.")
@@ -123,6 +153,32 @@ with tab3:
                     st.caption("두 순위가 많이 다릅니다 — 총액이 큰 기관과 1인당 지출이 큰 기관이 서로 다른 경우가 많습니다.")
                 else:
                     st.caption("두 순위가 어느 정도 겹치지만 완전히 같지는 않습니다.")
+
+    st.divider()
+    st.markdown("#### 임직원수와 복리후생")
+    st.caption("💡 기관 규모(임직원수)가 복리후생비 총액·1인당 복리후생비와 각각 어떤 관계를 보이는지 확인합니다.")
+    if "임직원수" in view.columns:
+        emp_col = VARIABLES["임직원수"]["column"]
+        wc1, wc2 = st.columns(2)
+        with wc1:
+            if total_col in view.columns:
+                fig_e1 = plot_scatter(view, emp_col, total_col, x_key="임직원수", y_key="복리후생비")
+                st.plotly_chart(fig_e1, use_container_width=True, key="p6_emp_total")
+        with wc2:
+            if percap_col in view.columns:
+                fig_e2 = plot_scatter(view, emp_col, percap_col, x_key="임직원수", y_key="1인당복리후생비")
+                st.plotly_chart(fig_e2, use_container_width=True, key="p6_emp_percap")
+
+    st.markdown("#### 보수와 복리후생의 관계")
+    st.caption("💡 직원 평균보수가 높은 기관은 1인당 복리후생비도 함께 높은지 확인합니다.")
+    if "직원평균보수" in view.columns and percap_col in view.columns:
+        pay_col = VARIABLES["직원평균보수"]["column"]
+        sub_pw = view[[pay_col, percap_col]].dropna()
+        fig_pw = plot_scatter(view, pay_col, percap_col, x_key="직원평균보수", y_key="1인당복리후생비")
+        st.plotly_chart(fig_pw, use_container_width=True, key="p6_pay_welfare")
+        if sub_pw.shape[0] > 2:
+            r, p = stats.pearsonr(sub_pw[pay_col], sub_pw[percap_col])
+            st.caption(f"Pearson r = {r:.3f} (N = {sub_pw.shape[0]:,})")
 
 st.divider()
 
