@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from scipy import stats
@@ -82,9 +83,19 @@ depts_sorted = dept_stats.sort_values("기관수", ascending=False)["주무부�
 sel_depts = st.multiselect("주무부처 선택", depts_sorted, default=depts_sorted[:4], key="p3_seldepts")
 if sel_depts:
     sub = view[view["주무부처"].isin(sel_depts)].dropna(subset=[col])
+    clip_c = st.checkbox("극단값 영향 줄이기 (상하위 1% 밖은 축 범위에서만 제외하고 보기, 데이터·박스 계산은 그대로 유지)",
+                          value=True, key="p3_clip")
     fig_box = px.box(sub, x="주무부처", y=col, points="all",
+                       category_orders={"주무부처": sel_depts},
                        labels={col: f"{get_label(var_key)} ({get_unit(var_key)})"})
     fig_box.update_layout(font=dict(size=15), height=500)
+    if clip_c and not sub.empty:
+        lo, hi = np.percentile(sub[col].dropna(), [1, 99])
+        if lo != hi:
+            pad = (hi - lo) * 0.15
+            fig_box.update_yaxes(range=[lo - pad, hi + pad])
+        st.caption("💡 극단값 영향 줄이기가 켜져 있어 y축 범위만 상하위 1% 기준으로 조정했습니다 (박스·중앙값 계산에는 영향을 주지 않습니다). "
+                    "범위 밖 극단값은 잘려서 화면에 안 보일 수 있습니다.")
     st.plotly_chart(fig_box, use_container_width=True)
 else:
     st.info("비교할 부처를 1개 이상 선택하세요.")
