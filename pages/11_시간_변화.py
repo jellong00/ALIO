@@ -140,8 +140,12 @@ if len(years) >= 2:
         if is_ratio:
             merged["변화"] = merged["이후값"] - merged["이전값"]
         else:
+            n_before_zero = merged.shape[0]
             merged = merged[merged["이전값"] != 0]
+            n_excluded_zero = n_before_zero - merged.shape[0]
             merged["변화"] = (merged["이후값"] - merged["이전값"]) / merged["이전값"] * 100
+            if n_excluded_zero > 0:
+                st.caption(f"⚠️ 기준연도({y_from}년) 값이 0인 기관 {n_excluded_zero:,}개는 증가율 계산에서 제외되었습니다.")
         merged = merged.replace([float("inf"), float("-inf")], pd.NA).dropna(subset=["변화"])
 
         if merged.empty:
