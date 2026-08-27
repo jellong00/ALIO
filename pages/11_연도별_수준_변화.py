@@ -37,17 +37,30 @@ col = VARIABLES[var_key]["column"]
 agg_func = "mean" if agg == "평균" else "sum"
 
 st.markdown(f"### 📈 연도별 {agg} 추이 — 비교 수준 선택")
-st.caption("전체·기관유형·주무부처·개별기관 중 원하는 선을 골라 한 그래프에서 비교합니다 (최대 4개 권장).")
+st.caption("전체·기관유형·주무부처·개별기관 중 원하는 선을 골라 한 그래프에서 비교합니다 (최대 4개 권장). "
+            "기관유형을 고르면 주무부처 목록이, 주무부처를 고르면 개별기관 목록이 그 안으로 좁혀집니다.")
 
 lc1, lc2, lc3, lc4 = st.columns(4)
 with lc1:
     show_overall = st.checkbox("전체 평균/합계", value=True, key="p12_showoverall")
 with lc2:
     sel_types = st.multiselect("기관유형", sorted(df["기관유형"].unique()), key="p12_seltypes")
+
+# 기관유형 선택에 따라 주무부처 후보를 좁힌다
+dept_pool = df[df["기관유형"].isin(sel_types)] if sel_types else df
+dept_options = sorted(dept_pool["주무부처"].unique())
+if "p12_seldepts" in st.session_state:
+    st.session_state["p12_seldepts"] = [d for d in st.session_state["p12_seldepts"] if d in dept_options]
 with lc3:
-    sel_depts = st.multiselect("주무부처", sorted(df["주무부처"].unique()), key="p12_seldepts")
+    sel_depts = st.multiselect("주무부처", dept_options, key="p12_seldepts")
+
+# 주무부처 선택에 따라 개별기관 후보를 좁힌다 (기관유형 선택도 함께 반영)
+org_pool = dept_pool[dept_pool["주무부처"].isin(sel_depts)] if sel_depts else dept_pool
+org_options = sorted(org_pool["기관명"].unique())
+if "p12_selorgs" in st.session_state:
+    st.session_state["p12_selorgs"] = [o for o in st.session_state["p12_selorgs"] if o in org_options]
 with lc4:
-    sel_orgs_trend = st.multiselect("개별기관", sorted(df["기관명"].unique()), key="p12_selorgs")
+    sel_orgs_trend = st.multiselect("개별기관", org_options, key="p12_selorgs")
 
 n_lines = int(show_overall) + len(sel_types) + len(sel_depts) + len(sel_orgs_trend)
 if n_lines > 4:
