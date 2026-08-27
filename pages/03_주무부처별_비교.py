@@ -43,6 +43,8 @@ st.divider()
 
 # ---------------- A. 주무부처별 산하기관 수 ----------------
 st.markdown("### A. 주무부처별 산하기관 수")
+st.caption("ℹ️ 이 차트는 '부처별로 등록된 기관 개수'를 세는 것이라, 기관유형·주무부처는 이 데이터에서 연도에 따라 바뀌지 않는 고정 속성이므로 연도를 바꿔도 값이 거의 동일합니다. "
+            "선택한 변수의 실제 값이 연도별로 달라지는 것은 아래 B섹션부터 확인할 수 있습니다.")
 dept_n = view.groupby("주무부처")["기관명"].nunique().reset_index(name="기관 수").sort_values("기관 수", ascending=False)
 fig_n = px.bar(dept_n.head(20), x="기관 수", y="주무부처", orientation="h")
 fig_n.update_layout(font=dict(size=14), height=520, title="산하기관 수 상위 20개 부처")
