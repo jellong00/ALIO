@@ -5,19 +5,15 @@ import plotly.graph_objects as go
 
 from utils.data_cleaner import get_full_panel, percentile_rank
 from utils.variables import VARIABLES, get_label, get_unit
+from utils.page_header import render_intro
 
 st.set_page_config(page_title="기관 프로필", layout="wide")
 st.title("⑩ 기관 프로필")
-st.markdown(
-    """
-<div style="background:#F3F6FA; border:1px solid #D8E0EA; border-radius:10px; padding:14px 18px; margin-bottom:8px; font-size:0.95rem; line-height:1.7;">
-<b>🎯 분석목적</b> · 하나의 기관을 전체·동일유형·동일부처와 비교합니다.<br>
-<b>📏 분석단위</b> · 해당 기관의 가장 최근 연도. 비교 대상(전체/동일유형/동일부처 평균)도 <b>같은 연도</b>로 맞춰 계산합니다.<br>
-<b>🔧 주요 분석방법</b> · 4중 비교표 · 백분위 · 상대 프로파일 · 시계열 · 선택 지표 기준 유사기관<br>
-<b>⚠️ 해석 시 주의</b> · 유사기관은 선택한 지표와 거리계산 방식에 따라 달라지는 참고용 결과입니다.
-</div>
-""",
-    unsafe_allow_html=True,
+render_intro(
+    purpose="하나의 기관을 전체·동일유형·동일부처와 비교합니다.",
+    unit="해당 기관의 가장 최근 연도. 비교 대상(전체/동일유형/동일부처 평균)도 같은 연도로 맞춰 계산합니다.",
+    methods="4중 비교표 · 백분위 · 상대 프로파일 · 시계열 · 선택 지표 기준 유사기관",
+    caution="유사기관은 선택한 지표와 거리계산 방식에 따라 달라지는 참고용 결과입니다.",
 )
 
 panel = get_full_panel()
