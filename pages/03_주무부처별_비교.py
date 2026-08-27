@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from scipy import stats
 
 from utils.data_cleaner import get_full_panel
 from utils.filters import sidebar_filters
@@ -13,7 +14,7 @@ st.title("③ 주무부처별 비교")
 render_intro(
     purpose="동일한 지표가 주무부처별 산하기관 사이에서 얼마나 다른지 확인합니다.",
     unit="선택 연도의 기관 (기본값: 최신연도)",
-    methods="산하기관 수(N) 확인 → 부처별 평균 dot plot → 선택 부처 2~5개 분포 비교 → 기관유형×주무부처 교차분석",
+    methods="산하기관 수(N) 확인 → 부처별 평균 dot plot → 표본 수와 평균의 안정성(CI폭) → 선택 부처 2~5개 분포 비교 → 기관유형×주무부처 교차분석",
     caution="주무부처마다 산하기관 수가 크게 다릅니다. 기관 수가 적은 부처의 평균은 소수 기관에 크게 좌우될 수 있으므로, N을 항상 함께 확인하세요.",
 )
 
@@ -90,8 +91,39 @@ else:
 
 st.divider()
 
-# ---------------- D. 기관유형 × 주무부처 교차분석 ----------------
-st.markdown("### D. 기관유형 × 주무부처 교차분석")
+# ---------------- D. 표본 수와 부처 평균의 안정성 ----------------
+st.markdown("### D. 표본 수와 부처 평균의 안정성")
+st.caption("산하기관이 2개뿐인 부처의 평균과 30개인 부처의 평균을 같은 확신으로 비교해도 될까요?")
+fig_scatter = px.scatter(dept_stats, x="기관수", y="평균", hover_name="주무부처",
+                           labels={"기관수": "산하기관 수", "평균": f"{get_label(var_key)} 평균"})
+fig_scatter.update_layout(font=dict(size=15), height=460)
+st.plotly_chart(fig_scatter, use_container_width=True)
+st.caption("💡 왼쪽(기관 수 적음)에 위치한 부처일수록 평균값의 변동성이 클 수 있습니다. 소수 기관으로 결정된 평균은 신중하게 해석하세요.")
+
+st.markdown("#### 산하기관 수와 95% 신뢰구간 폭")
+ci_rows = []
+for dept, g in view.groupby("주무부처"):
+    s = pd.to_numeric(g[col], errors="coerce").dropna()
+    n = s.shape[0]
+    if n >= 2 and s.std() > 0:
+        se = s.std() / (n ** 0.5)
+        ci_width = 2 * 1.96 * se
+        ci_rows.append({"주무부처": dept, "기관수": n, "CI폭": ci_width})
+ci_df = pd.DataFrame(ci_rows)
+if not ci_df.empty:
+    fig_ci = px.scatter(ci_df, x="기관수", y="CI폭", hover_name="주무부처",
+                          labels={"기관수": "산하기관 수 (N)", "CI폭": "평균의 95% 신뢰구간 폭"})
+    fig_ci.update_layout(font=dict(size=15), height=460)
+    st.plotly_chart(fig_ci, use_container_width=True)
+    st.caption("💡 산하기관 수가 적은 부처에서는 표본평균의 불확실성(신뢰구간 폭)이 커질 수 있음을 실제 데이터에서 확인합니다. "
+                "다만 신뢰구간 폭은 표본 수뿐 아니라 그 부처 내 값들의 분산에도 영향을 받으므로, 'N이 커지면 CI가 반드시 좁아진다'고 단정할 수는 없습니다.")
+else:
+    st.info("신뢰구간을 계산할 만큼 데이터가 충분한 부처가 없습니다.")
+
+st.divider()
+
+# ---------------- E. 기관유형 × 주무부처 교차분석 ----------------
+st.markdown("### E. 기관유형 × 주무부처 교차분석")
 st.caption("동일 기관유형 안에서도 주무부처에 따라 평균이 다른지, 또는 동일 주무부처 안에서도 기관유형별 차이가 나타나는지 탐색합니다.")
 cross_min_n = st.slider("교차표에 포함할 부처의 최소 기관 수", 1, 10, 3, key="p3_crossminn")
 
