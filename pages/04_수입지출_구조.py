@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 
 from utils.data_cleaner import get_full_panel
@@ -135,6 +136,19 @@ if dep_col and dep_col in view.columns and "총수입" in view.columns:
         fig_dep.add_vline(x=x_thresh, line_dash="dash", line_color="gray")
         fig_dep.add_hline(y=y_thresh, line_dash="dash", line_color="gray")
         fig_dep.update_layout(font=dict(size=16), height=520)
+
+        xc1, xc2 = st.columns([1, 2])
+        with xc1:
+            zoom_x = st.checkbox("x축 범위 좁혀서 보기 (극단값은 그대로 유지, 축 범위만 조정)", value=True, key="p4_zoomx")
+        if zoom_x:
+            with xc2:
+                x_pct = st.slider("x축 상한 기준 (총수입 백분위수)", 70, 99, 95, key="p4_xpct")
+            x_hi = float(np.percentile(sub_dep["총수입"], x_pct))
+            n_over = int((sub_dep["총수입"] > x_hi).sum())
+            fig_dep.update_xaxes(range=[sub_dep["총수입"].min() * 1.0, x_hi])
+            st.caption(f"💡 x축 범위를 상위 {100 - x_pct}% 지점({x_hi:,.0f} 백만원)까지만 표시합니다. "
+                        f"이보다 큰 기관 {n_over:,}개는 화면 오른쪽 밖에 위치하지만, 데이터·기준선·사분면 기관 수 계산에서는 제외되지 않습니다.")
+
         st.plotly_chart(fig_dep, use_container_width=True)
         st.caption("오른쪽 위: 총수입도 크고 정부지원 비중도 높은 기관 · 오른쪽 아래: 총수입은 크지만 정부지원 비중은 낮은 기관 · "
                     "왼쪽 위: 총수입은 작지만 정부지원 비중이 높은 기관 · 왼쪽 아래: 둘 다 낮은 기관.")
