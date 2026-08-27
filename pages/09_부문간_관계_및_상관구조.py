@@ -11,8 +11,8 @@ from utils.variables import VARIABLES, get_vars_by_category, CATEGORIES, get_lab
 from utils.charts import plot_correlation_heatmap
 from utils.page_header import render_intro, year_slice
 
-st.set_page_config(page_title="집단별 관계 및 상관구조", layout="wide")
-st.title("⑨ 집단별 관계 및 상관구조")
+st.set_page_config(page_title="부문간 관계 및 상관구조", layout="wide")
+st.title("⑨ 부문간 관계 및 상관구조")
 render_intro(
     purpose="전체에서 관찰된 두 변수의 관계가 기관유형이나 주무부처 내부에서도 동일하게 나타나는지 확인하고, 8개 부문이 서로 어떻게 얽혀 있는지 살펴봅니다.",
     unit="선택 연도의 기관 (기본값: 최신연도)",
