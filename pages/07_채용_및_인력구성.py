@@ -26,19 +26,6 @@ tab1, tab2 = st.tabs(["🧑‍💼 채용·인력", "👶 일·가정양립"])
 
 # ================= TAB 1: 채용·인력 =================
 with tab1:
-    st.markdown("### 규모효과 — 임직원수와 신규채용자 수")
-    st.caption("💡 임직원이 많은 기관은 신규채용 인원도 많은가? (기관 규모가 클수록 채용 인원도 자연스럽게 커질 수 있습니다.)")
-    emp_col = VARIABLES["임직원수"]["column"]
-    hire_col = VARIABLES["신규채용자수"]["column"]
-    if emp_col in view.columns and hire_col in view.columns:
-        fig_scale = plot_scatter(view, emp_col, hire_col, x_key="임직원수", y_key="신규채용자수")
-        st.plotly_chart(fig_scale, use_container_width=True, key="p7_scale")
-        sub_scale = view[[emp_col, hire_col]].dropna()
-        if sub_scale.shape[0] > 2:
-            r, p = stats.pearsonr(sub_scale[emp_col], sub_scale[hire_col])
-            st.caption(f"Pearson r = {r:.3f} (N = {sub_scale.shape[0]:,})")
-
-    st.divider()
     st.markdown("### 핵심 분석 1 — 신규채용자 수와 신규채용률")
     st.caption("💡 채용 인원이 많은 기관이 실제로도 적극적으로 채용하는 기관인가? 기관 규모에 따라 해석이 달라질 수 있습니다.")
     n_col = VARIABLES["신규채용자수"]["column"]
