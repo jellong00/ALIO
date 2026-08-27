@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from scipy import stats
 
 from utils.data_cleaner import get_full_panel
