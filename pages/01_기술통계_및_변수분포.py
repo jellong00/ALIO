@@ -71,9 +71,16 @@ with st.expander("📌 확인할 것 / 💡 포인트"):
 st.divider()
 st.markdown("### 📦 전체 분포 (Box plot)")
 import plotly.express as px
+import numpy as np
 box_data = view[[col]].dropna()
 fig_box = px.box(box_data, y=col, points="outliers", labels={col: f"{get_label(var_key)} ({get_unit(var_key)})"})
 fig_box.update_layout(font=dict(size=16), height=460)
+if clip and not box_data.empty:
+    lo, hi = np.percentile(box_data[col], [1, 99])
+    if lo != hi:
+        pad = (hi - lo) * 0.15
+        fig_box.update_yaxes(range=[lo - pad, hi + pad])
+    st.caption("극단값 영향 줄이기가 켜져 있어 y축 범위를 상하위 1% 기준으로 조정했습니다 (데이터 자체는 그대로 사용, 점으로 표시된 이상치는 축 범위 밖에 있을 수 있습니다).")
 st.plotly_chart(fig_box, use_container_width=True)
 
 st.divider()
