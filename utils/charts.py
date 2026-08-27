@@ -52,13 +52,13 @@ def plot_histogram(df, col, var_key=None, nbins=30, show_mean=True, show_median=
         if show_mean:
             m = data[col].mean()
             fig.add_vline(x=m, line_dash="solid", line_color="#E07B39", line_width=3,
-                           annotation_text=f"{m:,.1f}", annotation_position="top",
-                           annotation_font_color="#E07B39")
+                           annotation_text=f"{m:,.1f}", annotation_position="top right",
+                           annotation_font_color="#E07B39", annotation_yshift=6)
         if show_median:
             med = data[col].median()
             fig.add_vline(x=med, line_dash="dash", line_color="#2CA02C", line_width=3,
-                           annotation_text=f"{med:,.1f}", annotation_position="top",
-                           annotation_font_color="#2CA02C", annotation_yshift=-22)
+                           annotation_text=f"{med:,.1f}", annotation_position="top right",
+                           annotation_font_color="#2CA02C", annotation_yshift=32)
         if clip_extreme:
             rng = _percentile_range(data[col], 1, 99)
             if rng:
@@ -68,6 +68,7 @@ def plot_histogram(df, col, var_key=None, nbins=30, show_mean=True, show_median=
     if clip_extreme and n_clipped:
         title += f" — 상하위 1% 극단값 {n_clipped}건은 축 범위 밖에 있습니다"
     _apply_layout(fig, title=title)
+    fig.update_layout(margin=dict(t=90))
     return fig
 
 
