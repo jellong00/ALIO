@@ -21,6 +21,20 @@ render_intro(
 panel = get_full_panel()
 df = sidebar_filters(panel, key_prefix="p15")
 
+st.markdown("### 📋 패널 구성 요약")
+st.caption("이 페이지는 기관-연도 패널 전체를 사용합니다 (동일 기관이 여러 연도로 반복 관측됩니다).")
+_n_orgs = df["기관명"].nunique()
+_n_obs = df.shape[0]
+_years = sorted(df["연도"].unique())
+_year_range = f"{_years[0]}–{_years[-1]}" if _years else "N/A"
+_avg_years = df.groupby("기관명")["연도"].nunique().mean() if _n_orgs else 0
+pc1, pc2, pc3, pc4 = st.columns(4)
+pc1.metric("기관 수", f"{_n_orgs:,}")
+pc2.metric("전체 관측치 수 (기관-연도)", f"{_n_obs:,}")
+pc3.metric("연도 범위", _year_range)
+pc4.metric("기관별 평균 관측 연도 수", f"{_avg_years:.1f}")
+st.divider()
+
 PANEL_VARS = ["임직원수", "총수입", "정부지원의존도", "직원평균보수", "신규채용률",
               "복리후생비", "여성육아휴직사용자수", "남성육아휴직사용자수"]
 PANEL_VARS = [v for v in PANEL_VARS if VARIABLES[v]["column"] in df.columns]
