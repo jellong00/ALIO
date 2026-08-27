@@ -100,7 +100,23 @@ st.caption("💡 정부지원수입의 절대 금액이 큰 기관과, 총수입
             "아래 사분면으로 두 기관 집단이 실제로 어떻게 갈리는지 확인합니다.")
 dep_col = VARIABLES["정부지원의존도"]["column"] if "정부지원의존도" in VARIABLES else None
 if dep_col and dep_col in view.columns and "총수입" in view.columns:
-    sub_dep = view[["기관명", "기관유형", "주무부처", "총수입", dep_col]].dropna()
+    base_cols = ["기관명", "기관유형", "주무부처", "총수입", dep_col]
+    has_gov_income_col = "정부지원수입" in view.columns
+    if has_gov_income_col:
+        base_cols.append("정부지원수입")
+    sub_dep = view[base_cols].dropna(subset=["기관명", "기관유형", "주무부처", "총수입", dep_col])
+
+    exclude_zero = st.checkbox("정부지원수입이 없는(0원) 기관 제외", value=True, key="p4_excl_zero_gov")
+    if exclude_zero and not sub_dep.empty:
+        n_before = sub_dep.shape[0]
+        if has_gov_income_col:
+            sub_dep = sub_dep[pd.to_numeric(sub_dep["정부지원수입"], errors="coerce") > 0]
+        else:
+            sub_dep = sub_dep[sub_dep[dep_col] > 0]
+        n_excluded = n_before - sub_dep.shape[0]
+        if n_excluded > 0:
+            st.caption(f"정부지원수입이 0원(또는 정부지원의존도 0%)인 기관 {n_excluded:,}개를 제외했습니다.")
+
     if not sub_dep.empty:
         threshold_mode = st.radio("사분면 기준선", ["중앙값 기준", "직접 입력"], horizontal=True, key="p4_qmode")
         if threshold_mode == "중앙값 기준":
