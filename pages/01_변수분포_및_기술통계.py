@@ -108,15 +108,15 @@ def render_variable_eda(view: pd.DataFrame, category: str, key_prefix: str):
     st.plotly_chart(fig_box, use_container_width=True, key=f"{key_prefix}_box")
 
     st.divider()
-    st.markdown("### 🔎 이상치 기관 확인")
+    st.markdown("### 🔎 Top 5 · Bottom 5 기관")
     snap_named = view[["기관명", "기관유형", "주무부처", col]].dropna().sort_values(col)
     if not snap_named.empty:
         ec1, ec2 = st.columns(2)
         with ec1:
-            st.markdown("**값이 가장 작은 5개 기관**")
+            st.markdown("**Bottom 5 (값이 가장 작은 5개 기관)**")
             st.dataframe(snap_named.head(5).rename(columns={col: get_label(var_key)}), use_container_width=True, hide_index=True)
         with ec2:
-            st.markdown("**값이 가장 큰 5개 기관**")
+            st.markdown("**Top 5 (값이 가장 큰 5개 기관)**")
             st.dataframe(snap_named.tail(5).sort_values(col, ascending=False).rename(columns={col: get_label(var_key)}),
                          use_container_width=True, hide_index=True)
         st.caption("💡 기관유형·주무부처별 비교, 특정 기관의 상세 순위는 ②③⑩번 페이지에서 확인할 수 있습니다.")
