@@ -94,6 +94,49 @@ st.markdown(
 
 st.divider()
 
+# ---------------- 규모와 의존도의 구분 ----------------
+st.markdown("### 🧭 규모와 의존도의 구분 — 정부지원 '금액'이 큰 기관 vs '비중'이 높은 기관")
+st.caption("💡 정부지원수입의 절대 금액이 큰 기관과, 총수입 대비 정부지원 비중(정부지원의존도)이 높은 기관은 서로 다를 수 있습니다. "
+            "아래 사분면으로 두 기관 집단이 실제로 어떻게 갈리는지 확인합니다.")
+dep_col = VARIABLES["정부지원의존도"]["column"] if "정부지원의존도" in VARIABLES else None
+if dep_col and dep_col in view.columns and "총수입" in view.columns:
+    sub_dep = view[["기관명", "기관유형", "주무부처", "총수입", dep_col]].dropna()
+    if not sub_dep.empty:
+        threshold_mode = st.radio("사분면 기준선", ["중앙값 기준", "직접 입력"], horizontal=True, key="p4_qmode")
+        if threshold_mode == "중앙값 기준":
+            x_thresh = float(sub_dep["총수입"].median())
+            y_thresh = float(sub_dep[dep_col].median())
+        else:
+            qc1, qc2 = st.columns(2)
+            with qc1:
+                x_thresh = st.number_input("총수입 기준값 (백만원)", value=float(sub_dep["총수입"].median()), key="p4_xthresh")
+            with qc2:
+                y_thresh = st.number_input("정부지원의존도 기준값 (%)", value=float(sub_dep[dep_col].median()), key="p4_ythresh")
+
+        fig_dep = px.scatter(sub_dep, x="총수입", y=dep_col, color="기관유형", color_discrete_map=ORG_TYPE_COLORS,
+                               hover_name="기관명", hover_data=["주무부처"],
+                               labels={"총수입": "총수입 (백만원)", dep_col: "정부지원의존도 (%)"})
+        fig_dep.add_vline(x=x_thresh, line_dash="dash", line_color="gray")
+        fig_dep.add_hline(y=y_thresh, line_dash="dash", line_color="gray")
+        fig_dep.update_layout(font=dict(size=16), height=520)
+        st.plotly_chart(fig_dep, use_container_width=True)
+        st.caption("오른쪽 위: 총수입도 크고 정부지원 비중도 높은 기관 · 오른쪽 아래: 총수입은 크지만 정부지원 비중은 낮은 기관 · "
+                    "왼쪽 위: 총수입은 작지만 정부지원 비중이 높은 기관 · 왼쪽 아래: 둘 다 낮은 기관.")
+
+        q_counts = pd.DataFrame([
+            {"구분": "총수입↑ · 의존도↑", "기관 수": int(((sub_dep["총수입"] >= x_thresh) & (sub_dep[dep_col] >= y_thresh)).sum())},
+            {"구분": "총수입↑ · 의존도↓", "기관 수": int(((sub_dep["총수입"] >= x_thresh) & (sub_dep[dep_col] < y_thresh)).sum())},
+            {"구분": "총수입↓ · 의존도↑", "기관 수": int(((sub_dep["총수입"] < x_thresh) & (sub_dep[dep_col] >= y_thresh)).sum())},
+            {"구분": "총수입↓ · 의존도↓", "기관 수": int(((sub_dep["총수입"] < x_thresh) & (sub_dep[dep_col] < y_thresh)).sum())},
+        ])
+        st.dataframe(q_counts, use_container_width=True, hide_index=True)
+    else:
+        st.info("정부지원의존도와 총수입을 함께 가진 관측치가 없습니다.")
+else:
+    st.info("정부지원의존도 변수가 데이터에 없어 이 분석을 표시할 수 없습니다.")
+
+st.divider()
+
 # ---------------- 총수입 vs 총지출 ----------------
 st.markdown("### ⚖️ 총수입 vs 총지출")
 sub2 = view[["기관명", "기관유형", "주무부처", "총수입", "총지출"]].dropna()
