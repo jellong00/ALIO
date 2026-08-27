@@ -140,7 +140,7 @@ else:
 if not plot_df.empty:
     import plotly.express as px
     if tax_level == "기관유형":
-        fig_c = px.box(plot_df, x="기관유형", y=plot_col, labels={plot_col: plot_label})
+        fig_c = px.box(plot_df, x="기관유형", y=plot_col, points="outliers", labels={plot_col: plot_label})
         fig_c.update_layout(font=dict(size=16), height=460)
         st.plotly_chart(fig_c, use_container_width=True, key="p5_typebox")
         n_by_type = plot_df.groupby("기관유형").size().reset_index(name="N")
@@ -151,7 +151,7 @@ if not plot_df.empty:
         valid_depts = dept_n[dept_n >= min_n_dept].index
         dsub = plot_df[plot_df["주무부처"].isin(valid_depts)]
         if not dsub.empty:
-            fig_c = px.box(dsub, x="주무부처", y=plot_col, labels={plot_col: plot_label})
+            fig_c = px.box(dsub, x="주무부처", y=plot_col, points="outliers", labels={plot_col: plot_label})
             fig_c.update_layout(font=dict(size=14), height=500, xaxis_tickangle=-30)
             st.plotly_chart(fig_c, use_container_width=True, key="p5_deptbox")
             st.caption(f"최소 기관 수 {min_n_dept}개 이상인 부처만 표시합니다.")
