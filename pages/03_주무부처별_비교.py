@@ -85,7 +85,7 @@ if sel_depts:
     sub = view[view["주무부처"].isin(sel_depts)].dropna(subset=[col])
     clip_c = st.checkbox("극단값 영향 줄이기 (상하위 1% 밖은 축 범위에서만 제외하고 보기, 데이터·박스 계산은 그대로 유지)",
                           value=True, key="p3_clip")
-    fig_box = px.box(sub, x="주무부처", y=col, points="all",
+    fig_box = px.box(sub, x="주무부처", y=col, points="outliers",
                        category_orders={"주무부처": sel_depts},
                        labels={col: f"{get_label(var_key)} ({get_unit(var_key)})"})
     fig_box.update_layout(font=dict(size=15), height=500)
