@@ -144,10 +144,24 @@ if dep_col and dep_col in view.columns and "총수입" in view.columns:
             with xc2:
                 x_pct = st.slider("x축 상한 기준 (총수입 백분위수)", 70, 99, 95, key="p4_xpct")
             x_hi = float(np.percentile(sub_dep["총수입"], x_pct))
-            n_over = int((sub_dep["총수입"] > x_hi).sum())
+            n_over_x = int((sub_dep["총수입"] > x_hi).sum())
             fig_dep.update_xaxes(range=[sub_dep["총수입"].min() * 1.0, x_hi])
             st.caption(f"💡 x축 범위를 상위 {100 - x_pct}% 지점({x_hi:,.0f} 백만원)까지만 표시합니다. "
-                        f"이보다 큰 기관 {n_over:,}개는 화면 오른쪽 밖에 위치하지만, 데이터·기준선·사분면 기관 수 계산에서는 제외되지 않습니다.")
+                        f"이보다 큰 기관 {n_over_x:,}개는 화면 오른쪽 밖에 위치하지만, 데이터·기준선·사분면 기관 수 계산에서는 제외되지 않습니다.")
+
+        yc1, yc2 = st.columns([1, 2])
+        with yc1:
+            zoom_y = st.checkbox("y축 범위 좁혀서 보기 (극단값은 그대로 유지, 축 범위만 조정)", value=True, key="p4_zoomy")
+        if zoom_y:
+            with yc2:
+                y_pct_range = st.slider("y축 표시 범위 (정부지원의존도 백분위수)", 0, 100, (1, 99), key="p4_ypct")
+            y_lo = float(np.percentile(sub_dep[dep_col], y_pct_range[0]))
+            y_hi = float(np.percentile(sub_dep[dep_col], y_pct_range[1]))
+            n_over_y = int(((sub_dep[dep_col] < y_lo) | (sub_dep[dep_col] > y_hi)).sum())
+            pad_y = (y_hi - y_lo) * 0.05 if y_hi > y_lo else 1
+            fig_dep.update_yaxes(range=[y_lo - pad_y, y_hi + pad_y])
+            st.caption(f"💡 y축 범위를 {y_pct_range[0]}~{y_pct_range[1]}백분위수 구간({y_lo:,.1f}%~{y_hi:,.1f}%)으로 좁혔습니다. "
+                        f"범위 밖 기관 {n_over_y:,}개는 화면 위·아래 밖에 위치하지만, 데이터·기준선·사분면 기관 수 계산에서는 제외되지 않습니다.")
 
         st.plotly_chart(fig_dep, use_container_width=True)
         st.caption("오른쪽 위: 총수입도 크고 정부지원 비중도 높은 기관 · 오른쪽 아래: 총수입은 크지만 정부지원 비중은 낮은 기관 · "
