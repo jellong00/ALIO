@@ -14,11 +14,11 @@ import pandas as pd
 def render_intro(purpose: str, unit: str, methods: str, caution: str):
     st.markdown(
         f"""
-<div style="background:#F3F6FA; border:1px solid #D8E0EA; border-radius:10px; padding:14px 18px; margin-bottom:8px; font-size:0.95rem; line-height:1.7;">
-<b>🎯 분석목적</b> · {purpose}<br>
-<b>📏 분석단위</b> · {unit}<br>
-<b>🔧 주요 분석방법</b> · {methods}<br>
-<b>⚠️ 해석 시 주의</b> · {caution}
+<div style="background:#F3F6FA; border:1px solid #D8E0EA; border-radius:10px; padding:14px 18px; margin-bottom:8px; font-size:0.95rem; line-height:1.7; color:#111111;">
+<span style="color:#111111;"><b>🎯 분석목적</b> · {purpose}</span><br>
+<span style="color:#111111;"><b>📏 분석단위</b> · {unit}</span><br>
+<span style="color:#111111;"><b>🔧 주요 분석방법</b> · {methods}</span><br>
+<span style="color:#111111;"><b>⚠️ 해석 시 주의</b> · {caution}</span>
 </div>
 """,
         unsafe_allow_html=True,
