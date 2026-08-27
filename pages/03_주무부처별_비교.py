@@ -101,22 +101,40 @@ st.plotly_chart(fig_scatter, use_container_width=True)
 st.caption("💡 왼쪽(기관 수 적음)에 위치한 부처일수록 평균값의 변동성이 클 수 있습니다. 소수 기관으로 결정된 평균은 신중하게 해석하세요.")
 
 st.markdown("#### 산하기관 수와 95% 신뢰구간 폭")
+st.caption("부처마다 변수 값의 스케일 자체가 크게 다르면(예: 초대형 기관 1곳이 낀 부처) 절대 CI폭 비교가 스케일 차이에 묻힐 수 있습니다. "
+            "기본값은 평균 대비 상대적인 CI폭(%)이며, 절대값으로도 바꿔볼 수 있습니다.")
 ci_rows = []
 for dept, g in view.groupby("주무부처"):
     s = pd.to_numeric(g[col], errors="coerce").dropna()
     n = s.shape[0]
-    if n >= 2 and s.std() > 0:
+    if n >= 2 and s.std() > 0 and s.mean() != 0:
         se = s.std() / (n ** 0.5)
         ci_width = 2 * 1.96 * se
-        ci_rows.append({"주무부처": dept, "기관수": n, "CI폭": ci_width})
+        ci_rel = ci_width / abs(s.mean()) * 100
+        ci_rows.append({"주무부처": dept, "기관수": n, "CI폭": ci_width, "CI폭(%)": ci_rel})
 ci_df = pd.DataFrame(ci_rows)
 if not ci_df.empty:
-    fig_ci = px.scatter(ci_df, x="기관수", y="CI폭", hover_name="주무부처",
-                          labels={"기관수": "산하기관 수 (N)", "CI폭": "평균의 95% 신뢰구간 폭"})
-    fig_ci.update_layout(font=dict(size=15), height=460)
+    ci_c1, ci_c2 = st.columns(2)
+    with ci_c1:
+        ci_metric = st.radio("표시 방식", ["상대값 (%, 평균 대비)", "절대값"], horizontal=True, key="p3_cimetric")
+    with ci_c2:
+        ci_logy = st.checkbox("y축 로그 스케일", value=(ci_metric == "절대값"), key="p3_cilogy")
+    y_field = "CI폭(%)" if ci_metric.startswith("상대값") else "CI폭"
+    y_label = "평균 대비 95% 신뢰구간 폭 (%)" if ci_metric.startswith("상대값") else "95% 신뢰구간 폭"
+
+    trendline_opts = dict(log_y=True) if ci_logy else None
+    fig_ci = px.scatter(ci_df, x="기관수", y=y_field, hover_name="주무부처", trendline="ols",
+                          trendline_options=trendline_opts,
+                          log_y=ci_logy, labels={"기관수": "산하기관 수 (N)", y_field: y_label})
+    fig_ci.update_traces(marker=dict(size=10, opacity=0.75), selector=dict(mode="markers"))
+    fig_ci.update_layout(font=dict(size=15), height=480)
     st.plotly_chart(fig_ci, use_container_width=True)
     st.caption("💡 산하기관 수가 적은 부처에서는 표본평균의 불확실성(신뢰구간 폭)이 커질 수 있음을 실제 데이터에서 확인합니다. "
-                "다만 신뢰구간 폭은 표본 수뿐 아니라 그 부처 내 값들의 분산에도 영향을 받으므로, 'N이 커지면 CI가 반드시 좁아진다'고 단정할 수는 없습니다.")
+                "다만 신뢰구간 폭은 표본 수뿐 아니라 그 부처 내 값들의 분산에도 영향을 받으므로, 'N이 커지면 CI가 반드시 좁아진다'고 단정할 수는 없습니다. "
+                "점선(추세선)의 기울기가 완만하거나 뒤섞여 보인다면, 그 자체가 '표본 수만으로는 불확실성이 깔끔하게 설명되지 않는다'는 것을 보여주는 실제 사례입니다.")
+
+    with st.expander("📋 부처별 CI폭 표 보기"):
+        st.dataframe(ci_df.round(2).sort_values("기관수"), use_container_width=True, hide_index=True)
 else:
     st.info("신뢰구간을 계산할 만큼 데이터가 충분한 부처가 없습니다.")
 
