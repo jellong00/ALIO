@@ -53,6 +53,13 @@ for org_type, g in view.groupby("기관유형"):
         "표준편차": s.std(), "Q1": s.quantile(0.25), "Q3": s.quantile(0.75),
     })
 stat_df = pd.DataFrame(rows).round(1).sort_values("평균", ascending=False)
+
+st.markdown("**집단별 유효 N**")
+n_cols = st.columns(max(len(stat_df), 1))
+for c, (_, r) in zip(n_cols, stat_df.iterrows()):
+    c.metric(r["기관유형"], f"N = {int(r['기관 수'])}")
+st.caption("💡 이후 ANOVA·사후검정 결과를 해석할 때 집단별 N을 함께 확인하세요. N이 적은 집단의 평균·검정 결과는 소수 관측치에 크게 좌우될 수 있습니다.")
+
 st.dataframe(stat_df, use_container_width=True, hide_index=True)
 
 st.divider()
